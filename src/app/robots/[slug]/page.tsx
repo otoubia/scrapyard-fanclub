@@ -19,7 +19,7 @@ export default async function RobotPage({ params }: { params: Promise<{ slug: st
 
     if (robot) {
       const [resultsRes, mediaRes] = await Promise.all([
-        supabase.from('robot_results').select('*, event:events(*)').eq('robot_id', robot.id).order('created_at', { ascending: false }).limit(100),
+        supabase.from('robot_results').select('*, event:events(id, title, start_date, location, external_id, status)').eq('robot_id', robot.id).order('created_at', { ascending: false }).limit(100),
         supabase.from('media').select('*').eq('robot_id', robot.id).eq('approved', true).order('created_at', { ascending: false }),
       ])
       results = resultsRes.data ?? []
@@ -69,7 +69,13 @@ export default async function RobotPage({ params }: { params: Promise<{ slug: st
               .map((r: any) => (
               <div key={r.id} className="card p-4 flex items-center justify-between">
                 <div>
-                  <p className="font-semibold">{r.event?.title ?? 'Unknown event'}</p>
+                  {(() => {
+                    const m = r.event?.external_id?.match(/rce-event:(\d+)/)
+                    const url = m ? `https://www.robotcombatevents.com/events/${m[1]}` : null
+                    return url
+                      ? <a href={url} target="_blank" rel="noopener noreferrer" className="font-semibold hover:text-orange-400 transition-colors">{r.event?.title ?? 'Unknown event'}</a>
+                      : <p className="font-semibold">{r.event?.title ?? 'Unknown event'}</p>
+                  })()}
                   <div className="flex flex-wrap gap-x-3 mt-0.5">
                   {r.event?.start_date && !r.event.start_date.startsWith('2020') && (
                     <p className="text-xs text-gray-500 flex items-center gap-1">

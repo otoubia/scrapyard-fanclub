@@ -13,18 +13,31 @@ export default async function HomePage() {
 
   try {
     const supabase = await createClient()
-    const [eventsRes, highlightsRes, mediaRes, robotsRes, postsRes] = await Promise.all([
-      supabase.from('events').select('*').order('start_date', { ascending: false }).limit(20),
-      supabase.from('highlights').select('*, robot:robots(*), event:events(*)').order('created_at', { ascending: false }).limit(6),
+    const [eventsRes, highlightsRes, mediaRes, robotsRes, postsRes, competitorsRes] = await Promise.all([
+      supabase.from('events').select('*, external_id').order('start_date', { ascending: false }).limit(100),
+      supabase.from('highlights').select('*, robot:robots(*), event:events(*)').order('created_at', { ascending: false }),
       supabase.from('media').select('*, robot:robots(*), event:events(*)').eq('approved', true).order('created_at', { ascending: false }).limit(12),
       supabase.from('robots').select('*').eq('active', true).order('name'),
       supabase.from('posts').select('*').eq('approved', true).order('created_at', { ascending: false }).limit(6),
+      supabase.from('robot_results').select('event_id, robot:robots(name, slug)').is('placement', null),
     ])
     events = eventsRes.data ?? []
-    highlights = highlightsRes.data ?? []
+    // Sort highlights by event start_date descending
+    highlights = (highlightsRes.data ?? []).sort((a: any, b: any) =>
+      new Date(b.event?.start_date ?? 0).getTime() - new Date(a.event?.start_date ?? 0).getTime()
+    )
     media = mediaRes.data ?? []
     robots = robotsRes.data ?? []
     posts = postsRes.data ?? []
+
+    // Build a map of event_id → competing robots
+    const competitorMap: Record<string, any[]> = {}
+    for (const r of competitorsRes.data ?? []) {
+      if (!competitorMap[r.event_id]) competitorMap[r.event_id] = []
+      competitorMap[r.event_id].push(r.robot)
+    }
+    // Attach competitors to events
+    events = events.map((e: any) => ({ ...e, competitors: competitorMap[e.id] ?? [] }))
   } catch {
     // Supabase not yet configured — placeholder UI shown
   }

@@ -1,15 +1,28 @@
 'use client'
 
 import { useState } from 'react'
-import { Calendar, MapPin, Radio, Clock, Trophy } from 'lucide-react'
+import { Calendar, MapPin, Radio, Clock, Trophy, ExternalLink, Cpu } from 'lucide-react'
 import Link from 'next/link'
 import { formatDateShort } from '@/lib/utils'
 
+function rceEventUrl(external_id: string | undefined): string | null {
+  if (!external_id) return null
+  const m = external_id.match(/rce-event:(\d+)/)
+  return m ? `https://www.robotcombatevents.com/events/${m[1]}` : null
+}
+
 function EventCard({ event, isLive = false }: { event: any; isLive?: boolean }) {
+  const eventUrl = rceEventUrl(event.external_id)
+  const competitors: any[] = event.competitors ?? []
+
   return (
     <div className={`card p-5 flex flex-col gap-3 ${isLive ? 'border-orange-500 live-badge' : ''}`}>
       <div className="flex items-start justify-between gap-2">
-        <h3 className="font-bold text-base leading-tight">{event.title}</h3>
+        <h3 className="font-bold text-base leading-tight">
+          {eventUrl
+            ? <Link href={eventUrl} target="_blank" className="hover:text-orange-400 transition-colors">{event.title}</Link>
+            : event.title}
+        </h3>
         {isLive && (
           <span className="flex items-center gap-1 text-xs bg-orange-500 text-white px-2 py-0.5 rounded-full font-bold shrink-0">
             <Radio size={10} /> LIVE
@@ -17,19 +30,36 @@ function EventCard({ event, isLive = false }: { event: any; isLive?: boolean }) 
         )}
       </div>
       <div className="flex flex-col gap-1 text-sm text-gray-400">
-        <span className="flex items-center gap-1.5">
-          <Calendar size={13} /> {formatDateShort(event.start_date)}
-          {event.end_date && event.end_date !== event.start_date && ` – ${formatDateShort(event.end_date)}`}
-        </span>
+        {event.start_date && !event.start_date.startsWith('2020') && (
+          <span className="flex items-center gap-1.5">
+            <Calendar size={13} /> {formatDateShort(event.start_date)}
+            {event.end_date && event.end_date !== event.start_date && ` – ${formatDateShort(event.end_date)}`}
+          </span>
+        )}
         {event.location && (
           <span className="flex items-center gap-1.5"><MapPin size={13} /> {event.location}</span>
         )}
-        {event.event_source && (
-          <span className="text-xs uppercase tracking-wide text-orange-500/70">{event.event_source}</span>
-        )}
       </div>
+
+      {competitors.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {competitors.map((r: any) => (
+            <Link key={r.slug} href={`/robots/${r.slug}`}
+              className="flex items-center gap-1 text-xs bg-orange-500/10 text-orange-400 border border-orange-500/20 px-2 py-0.5 rounded-full hover:bg-orange-500/20 transition-colors">
+              <Cpu size={9} /> {r.name}
+            </Link>
+          ))}
+        </div>
+      )}
+
       {event.description && <p className="text-sm text-gray-400 line-clamp-2">{event.description}</p>}
-      <div className="flex gap-2 mt-auto pt-2">
+      <div className="flex gap-2 mt-auto pt-2 flex-wrap">
+        {eventUrl && (
+          <Link href={eventUrl} target="_blank"
+            className="flex items-center gap-1 text-xs border border-[#2a2a2a] text-gray-400 px-3 py-1.5 rounded hover:border-orange-500 hover:text-orange-400 transition-colors">
+            <ExternalLink size={11} /> RCE Page
+          </Link>
+        )}
         {event.truefinals_url && (
           <Link href={event.truefinals_url} target="_blank"
             className="text-xs bg-orange-500 text-white px-3 py-1.5 rounded font-bold hover:bg-orange-600 transition-colors">
