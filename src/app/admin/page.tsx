@@ -113,34 +113,38 @@ export default function AdminPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <h1 className="section-title mb-0">Admin Panel</h1>
-        <div className="flex gap-2">
-          <button onClick={triggerSync} disabled={syncing || !!syncingSlug}
-            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
-            <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
-            {syncing ? 'Syncing...' : 'Sync Everything'}
-          </button>
-          <button onClick={async () => {
-            setSyncingLive(true); setLiveSummary(null)
-            try {
-              const res = await fetch('/api/cron/sync-live', { headers: { authorization: `Bearer ${password}` } })
-              const d = await res.json()
-              setLiveSummary(d.live
-                ? `🔴 LIVE: ${d.liveBots.join(', ')} at ${d.activeTournaments.join(', ')}`
-                : `No active event (${d.totalRecentFights ?? 0} fights in last 24h)`)
-            } finally { setSyncingLive(false) }
-          }} disabled={syncingLive}
-            className="flex items-center gap-2 border border-red-500 text-red-400 hover:bg-red-500/10 px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
-            <RefreshCw size={14} className={syncingLive ? 'animate-spin' : ''} />
-            {syncingLive ? 'Checking...' : '🔴 Sync Live'}
-          </button>
-        </div>
+        <button onClick={triggerSync} disabled={syncing || !!syncingSlug}
+          className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
+          <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+          {syncing ? 'Syncing...' : 'Sync Everything'}
+        </button>
       </div>
 
-      {liveSummary && (
-        <div className="mb-4 card p-3 text-sm text-red-400">{liveSummary}</div>
-      )}
+      {/* Live event tracking */}
+      <div className="mb-6 card p-4 flex items-center justify-between gap-4">
+        <div>
+          <p className="font-bold text-sm">🔴 Live Event Tracking</p>
+          <p className="text-xs text-gray-500 mt-0.5">Check for active NHRL fights happening right now</p>
+          {liveSummary && <p className="text-xs mt-1 text-red-400">{liveSummary}</p>}
+        </div>
+        <button onClick={async () => {
+          setSyncingLive(true); setLiveSummary(null)
+          try {
+            const res = await fetch('/api/cron/sync-live', { headers: { authorization: `Bearer ${password}` } })
+            const d = await res.json()
+            setLiveSummary(d.live
+              ? `🔴 LIVE: ${d.liveBots.join(', ')} at ${d.activeTournaments.join(', ')}`
+              : `No active event (${d.totalRecentFights ?? 0} fights in last 24h)`)
+          } finally { setSyncingLive(false) }
+        }} disabled={syncingLive}
+          className="flex items-center gap-2 border border-red-500 text-red-400 hover:bg-red-500/10 px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50 shrink-0">
+          <RefreshCw size={13} className={syncingLive ? 'animate-spin' : ''} />
+          {syncingLive ? 'Checking...' : 'Check Now'}
+        </button>
+      </div>
+
       {resultsSummary && (
         <div className="mb-6 card p-4 text-sm text-green-400 whitespace-pre-wrap">{resultsSummary}</div>
       )}

@@ -59,7 +59,11 @@ export default async function HomePage() {
     // Supabase not yet configured — placeholder UI shown
   }
 
-  const pastEvents = events.filter(e => e.status === 'past' && eventIdsWithResults.has(e.id))
+  // Only show past events where at least one team bot competed
+  // Fall back to all past events if data didn't load
+  const pastEvents = eventIdsWithResults.size > 0
+    ? events.filter(e => e.status === 'past' && eventIdsWithResults.has(e.id))
+    : events.filter(e => e.status === 'past')
   const currentEvents = events.filter(e => e.status === 'current')
   const upcomingEvents = events
     .filter(e => e.status === 'upcoming')
