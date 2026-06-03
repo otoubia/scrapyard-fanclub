@@ -13,11 +13,12 @@ export default async function HomePage() {
 
   try {
     const supabase = await createClient()
-    const [eventsRes, highlightsRes, mediaRes, robotsRes, postsRes, competitorsRes] = await Promise.all([
+    const [eventsRes, highlightsRes, mediaRes, robotsRes, robotResultCountsRes, postsRes, competitorsRes] = await Promise.all([
       supabase.from('events').select('*, external_id').order('start_date', { ascending: false }).limit(100),
       supabase.from('highlights').select('*, robot:robots(*), event:events(*)').order('created_at', { ascending: false }),
       supabase.from('media').select('*, robot:robots(*), event:events(*)').eq('approved', true).order('created_at', { ascending: false }).limit(12),
-      supabase.from('robots').select('*, robot_results(count)').eq('active', true),
+      supabase.from('robots').select('*').eq('active', true),
+      supabase.from('robot_results').select('robot_id'),
       supabase.from('posts').select('*').eq('approved', true).order('created_at', { ascending: false }).limit(6),
       supabase.from('robot_results').select('event_id, robot:robots(name, slug)').is('placement', null),
     ])
@@ -27,10 +28,14 @@ export default async function HomePage() {
       new Date(b.event?.start_date ?? 0).getTime() - new Date(a.event?.start_date ?? 0).getTime()
     )
     media = mediaRes.data ?? []
-    // Sort robots by number of events attended (most to least), then alphabetically
+    // Count events per robot and sort by most events
+    const resultCounts: Record<string, number> = {}
+    for (const r of robotResultCountsRes.data ?? []) {
+      resultCounts[r.robot_id] = (resultCounts[r.robot_id] ?? 0) + 1
+    }
     robots = (robotsRes.data ?? []).sort((a: any, b: any) => {
-      const aCount = parseInt(a.robot_results?.[0]?.count ?? 0)
-      const bCount = parseInt(b.robot_results?.[0]?.count ?? 0)
+      const aCount = resultCounts[a.id] ?? 0
+      const bCount = resultCounts[b.id] ?? 0
       if (bCount !== aCount) return bCount - aCount
       return a.name.localeCompare(b.name)
     })
