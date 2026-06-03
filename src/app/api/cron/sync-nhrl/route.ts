@@ -198,12 +198,31 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 3. Filter past tournaments to relevant ones
-  const relevant = allTournaments.filter(isRelevantTournament)
-
   // 3. Get NHRL robots from DB (those with nhrl_clean_name in stats)
   const { data: allRobots } = await supabase.from('robots').select('id, name, slug, stats').eq('active', true)
   const nhrlRobots = (allRobots ?? []).filter(r => r.stats?.nhrl_clean_name)
+
+  // Add robot_results entries for upcoming NHRL events so bots show as competing
+  for (const ev of upcomingFromWebsite) {
+    if (!ev.date || new Date(ev.date) <= new Date()) continue
+    const { data: eventRow } = await supabase
+      .from('events').select('id').eq('external_id', ev.external_id).single()
+    if (!eventRow) continue
+    for (const robot of nhrlRobots) {
+      const { data: existing } = await supabase
+        .from('robot_results').select('id')
+        .eq('robot_id', robot.id).eq('event_id', eventRow.id).single()
+      if (!existing) {
+        await supabase.from('robot_results').insert({
+          robot_id: robot.id, event_id: eventRow.id,
+          wins: 0, losses: 0, placement: null, is_highlight: false, notes: 'NHRL upcoming',
+        })
+      }
+    }
+  }
+
+  // 4. Filter past tournaments to relevant ones
+  const relevant = allTournaments.filter(isRelevantTournament)
 
   // 4. Fetch career stats for each NHRL bot
   const botStatsMap: Record<string, any> = {}
