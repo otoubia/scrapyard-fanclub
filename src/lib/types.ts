@@ -27,6 +27,7 @@ export interface Robot {
   weapon_type?: string
   stats?: Record<string, unknown>
   image_url?: string
+  rce_url?: string
   active: boolean
   created_at: string
 }

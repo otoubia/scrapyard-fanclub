@@ -33,6 +33,7 @@ create table if not exists robots (
   weapon_type text,
   stats jsonb,
   image_url text,
+  rce_url text,
   active boolean default true,
   created_at timestamptz default now()
 );
@@ -109,17 +110,18 @@ create policy "Public read highlights" on highlights for select using (true);
 create policy "Anyone can submit posts" on posts for insert with check (true);
 
 -- Seed robots
-insert into robots (name, slug, weight_class, weapon_type, description, active) values
-  ('Maccabot', 'maccabot', '30lb', 'Unknown', 'A promising 30lb NHRL competitor. Builders: Max, Jordan, and Ilan.', true),
-  ('Trampoline', 'trampoline', 'Unknown', 'Unknown', 'Placeholder — add details via admin panel.', true),
-  ('Control Freak', 'control-freak', '1lb Antweight', 'Spinner', 'Antweight spinner competing on robotcombatevents.com.', true),
-  ('Power Off', 'power-off', 'Unknown', 'Unknown', 'Placeholder — add details via admin panel.', true),
-  ('Power On', 'power-on', 'Unknown', 'Unknown', 'Placeholder — add details via admin panel.', true),
-  ('Joyful Timeline', 'joyful-timeline', 'Unknown', 'Unknown', 'Placeholder — add details via admin panel.', true),
-  ('Twitch', 'twitch', 'Unknown', 'Unknown', 'Placeholder — add details via admin panel.', true),
-  ('Tinkerbot', 'tinkerbot', 'Unknown', 'Unknown', 'Placeholder — add details via admin panel.', true),
-  ('Sarissa', 'sarissa', 'Unknown', 'Unknown', 'Placeholder — add details via admin panel.', true),
-  ('Last Minute', 'last-minute', '1lb Antweight', 'Unknown', 'Antweight competitor. Known win: pitted opponent "Sonic".', true),
-  ('Last Second', 'last-second', 'Unknown', 'Unknown', 'Placeholder — add details via admin panel.', true),
-  ('Split Decision', 'split-decision', '150g', 'Thwackbot', 'Heavily armoured 150g thwackbot. Survived Robonerd and multiple beetleweight fights.', true)
+insert into robots (name, slug, weight_class, weapon_type, description, rce_url, active) values
+  ('Maccabot',       'maccabot',       '30lb Featherweight',    'Spinner',       'Team Scrap Yard''s 30lb featherweight spinner.',                                          'https://www.robotcombatevents.com/groups/2570/resources/20462', true),
+  ('Trampoline',     'trampoline',     '1lb Plastic Antweight', 'Spinner',       'A bot that likes to bounce. Overall record: 32-31. Two-time 1st place finisher.',        'https://www.robotcombatevents.com/groups/2570/resources/9751',  true),
+  ('Control Freak',  'control-freak',  '1lb Antweight',         'Control Bot',   'Antweight control bot. Overall record: 25-9. 1st place at GSCRL Mechanical Mayhem.',     'https://www.robotcombatevents.com/groups/2570/resources/16240', true),
+  ('Split Decision', 'split-decision', '3lb Beetleweight',      'Hammer Spinner','Beetleweight with a wiiiiide hammer saw design.',                                         'https://www.robotcombatevents.com/groups/2570/resources/23819', true),
+  ('Power Off',      'power-off',      '1lb Antweight',         'Spinner',       'Antweight spinner. Overall record: 4-8.',                                                 'https://www.robotcombatevents.com/groups/2570/resources/9233',  true),
+  ('Power On',       'power-on',       '3lb Beetleweight',      'Spinner',       'Beetleweight spinner. 5th place at GSCRL April Annihilation 2026.',                      'https://www.robotcombatevents.com/groups/2570/resources/12089', true),
+  ('Joyful Timeline','joyful-timeline','1lb Antweight',         'Spinner',       'Antweight spinner. 2nd place at GSCRL April Annihilation 2026 (14.25 pts).',             'https://www.robotcombatevents.com/groups/2570/resources/24396', true),
+  ('Twitch',         'twitch',         '150g Fairyweight',      'Spinner',       'Mini impulse fairyweight spinner. 1st place at GSCRL April Annihilation 2026.',          'https://www.robotcombatevents.com/groups/2570/resources/21147', true),
+  ('TinkerBot',      'tinkerbot',      '150g Fairyweight',      'Unknown',       'Fairyweight competitor. 2nd place at GSCRL Mechanical Mayhem 2026.',                     'https://www.robotcombatevents.com/groups/2570/resources/18253', true),
+  ('Sarissa',        'sarissa',        '1lb Antweight',         'Wedge Spinner', 'Cool Thagomizer. Antweight wedge spinner.',                                               'https://www.robotcombatevents.com/groups/2570/resources/21148', true),
+  ('Last Minute',    'last-minute',    '1lb Plastic Antweight', 'Spinner',       'Plastic antweight spinner. 3rd place at GSCRL April Annihilation 2026.',                 'https://www.robotcombatevents.com/groups/2570/resources/11960', true),
+  ('Last Second',    'last-second',    '150g Fairyweight',      'Spinner',       'Fairyweight spinner. 3rd place at GSCRL April Annihilation 2026.',                       'https://www.robotcombatevents.com/groups/2570/resources/26988', true),
+  ('Fart',           'fart',           '1lb Antweight',         'Spinner',       'Antweight spinner competing in the GSCRL circuit.',                                       'https://www.robotcombatevents.com/groups/2570/resources/25978', true)
 on conflict (slug) do nothing;
