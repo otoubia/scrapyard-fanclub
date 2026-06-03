@@ -61,7 +61,11 @@ export default async function RobotPage({ params }: { params: Promise<{ slug: st
           <h2 className="section-title">Event Results</h2>
           <div className="flex flex-col gap-3">
             {[...results]
-              .sort((a, b) => new Date(b.event?.start_date ?? 0).getTime() - new Date(a.event?.start_date ?? 0).getTime())
+              .sort((a, b) => {
+                const dateA = a.event?.start_date && !a.event.start_date.startsWith('2020') ? new Date(a.event.start_date).getTime() : 0
+                const dateB = b.event?.start_date && !b.event.start_date.startsWith('2020') ? new Date(b.event.start_date).getTime() : 0
+                return dateB - dateA
+              })
               .map((r: any) => (
               <div key={r.id} className="card p-4 flex items-center justify-between">
                 <div>
