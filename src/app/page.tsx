@@ -21,7 +21,7 @@ export default async function HomePage() {
       supabase.from('robots').select('*').eq('active', true),
       supabase.from('robot_results').select('robot_id, event_id'),
       supabase.from('posts').select('*').eq('approved', true).order('created_at', { ascending: false }).limit(6),
-      supabase.from('robot_results').select('event_id, robot:robots(name, slug)').is('placement', null),
+      supabase.from('robot_results').select('event_id, robot:robots(name, slug)'),
     ])
     events = eventsRes.data ?? []
     // Sort highlights by event start_date descending
