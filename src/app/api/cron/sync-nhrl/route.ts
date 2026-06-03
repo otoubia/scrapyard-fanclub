@@ -279,7 +279,7 @@ export async function GET(req: NextRequest) {
     const byTournament = new Map<string, { name: string, wins: number, losses: number }>()
     for (const fight of fights) {
       const t = byTournament.get(fight.tournamentId) ?? { name: fight.tournamentName, wins: 0, losses: 0 }
-      if (fight.won) t.wins++ else t.losses++
+      if (fight.won) { t.wins++ } else { t.losses++ }
       byTournament.set(fight.tournamentId, t)
     }
 
