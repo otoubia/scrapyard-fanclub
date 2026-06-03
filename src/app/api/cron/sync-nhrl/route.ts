@@ -70,45 +70,27 @@ function getPlacementFromBracket(rounds: BracketRound[], botName: string): { pla
 interface BotFight {
   tournamentId: string
   tournamentName: string
-  botIsRed: boolean
   won: boolean
-  winType: string
 }
 
-// Parse fightsByBot.php to get complete fight history with tournament IDs
-function parseFightsByBot(html: string, botCleanName: string): BotFight[] {
-  const fights: BotFight[] = []
-  // Each row: <tr>...<td>matchId</td><td><a href="...tournamentID=X">Name</a></td>...
-  const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
-  let m
-  while ((m = rowRegex.exec(html)) !== null) {
-    const row = m[1]
-    const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(c =>
-      c[1].replace(/<[^>]+>/g, '').trim()
+// Fetch fight history from BrettZone's backend JSON API
+async function fetchBotFights(cleanName: string): Promise<BotFight[]> {
+  try {
+    const res = await fetch(
+      `https://brettzone.nhrl.io/brettZone/backend/fightsByBot.php?bot=${cleanName}`,
+      { next: { revalidate: 0 } }
     )
-    if (cells.length < 8) continue
-
-    // Extract tournament ID from href
-    const hrefMatch = row.match(/tournamentID=([a-zA-Z0-9_-]+)/)
-    if (!hrefMatch) continue
-    const tournamentId = hrefMatch[1]
-    const tournamentName = cells[1]
-
-    // cols: 0=matchId, 1=tournament, 2=round, 3=cage, 4=redBot, 5=blueBot, 6=winner, 7=winType
-    const redBot = cells[4]?.toLowerCase().replace(/\s+/g, '')
-    const clean = botCleanName.toLowerCase()
-    const botIsRed = redBot === clean || (cells[4]?.toLowerCase().includes(botCleanName.toLowerCase()) ?? false)
-
-    // Determine winner
-    const winner = cells[6]?.toLowerCase() // 'red' or 'blue'
-    const won = botIsRed ? winner === 'red' : winner === 'blue'
-    const winType = cells[7] ?? ''
-
-    if (tournamentId && (winner === 'red' || winner === 'blue')) {
-      fights.push({ tournamentId, tournamentName, botIsRed, won, winType })
-    }
+    if (!res.ok) return []
+    const data = await res.json()
+    return (data.fights ?? []).map((f: any) => ({
+      tournamentId: f.tournamentID,
+      tournamentName: f.tournamentName,
+      // Bot won if their wins field is "1"
+      won: f.player1clean === cleanName ? f.player1wins === '1' : f.player2wins === '1',
+    }))
+  } catch {
+    return []
   }
-  return fights
 }
 
 function checkAuth(req: NextRequest) {
@@ -248,12 +230,12 @@ export async function GET(req: NextRequest) {
   await Promise.all(nhrlRobots.map(async robot => {
     const cleanName = robot.stats.nhrl_clean_name
     try {
-      const [statsRes, fightsRes] = await Promise.all([
-        fetch(`${NHRL_BASE}/stats/bot/${cleanName}`, { next: { revalidate: 0 } }),
-        fetch(`https://brettzone.nhrl.io/brettZone/fightsByBot.php?bot=${cleanName}`, { next: { revalidate: 0 } }),
+      const [statsRes, fights] = await Promise.all([
+        fetch(`${NHRL_BASE}/stats/bot/${cleanName}`, { next: { revalidate: 0 } }).then(r => r.ok ? r.json() : null),
+        fetchBotFights(cleanName),
       ])
-      if (statsRes.ok) botStatsMap[robot.id] = (await statsRes.json()).botStats
-      if (fightsRes.ok) botFightsMap[robot.id] = parseFightsByBot(await fightsRes.text(), cleanName)
+      if (statsRes) botStatsMap[robot.id] = statsRes.botStats
+      botFightsMap[robot.id] = fights
     } catch {}
   }))
 
