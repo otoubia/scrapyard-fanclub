@@ -1,14 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CheckCircle, XCircle, Clock, RefreshCw } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, RefreshCw, Cpu } from 'lucide-react'
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [authed, setAuthed] = useState(false)
   const [posts, setPosts] = useState<any[]>([])
+  const [robots, setRobots] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [syncingSlug, setSyncingSlug] = useState<string | null>(null)
   const [resultsSummary, setResultsSummary] = useState<string | null>(null)
 
   async function fetchPosts(secret: string) {
@@ -18,6 +20,9 @@ export default function AdminPage() {
       if (!res.ok) { setAuthed(false); return }
       setPosts(await res.json())
       setAuthed(true)
+      // Also fetch robot list
+      const robotsRes = await fetch('/api/admin/robots', { headers: { authorization: `Bearer ${secret}` } })
+      if (robotsRes.ok) setRobots(await robotsRes.json())
     } finally { setLoading(false) }
   }
 
@@ -30,38 +35,41 @@ export default function AdminPage() {
     fetchPosts(password)
   }
 
+  async function syncOneBot(slug: string) {
+    setSyncingSlug(slug)
+    setResultsSummary(null)
+    try {
+      const res = await fetch(`/api/cron/sync-robot-results?slug=${slug}`, { headers: { authorization: `Bearer ${password}` } })
+      const data = await res.json()
+      const name = Object.keys(data.perRobot ?? {})[0] ?? slug
+      const count = data.totalResults ?? 0
+      const highlights = data.totalHighlights ?? 0
+      const fixed = data.fixedDates ?? 0
+      setResultsSummary(`✅ ${name}: ${count} results, ${highlights} highlights${fixed ? `, ${fixed} dates fixed` : ''}`)
+    } finally { setSyncingSlug(null) }
+  }
+
   async function triggerSync() {
     setSyncing(true)
     setResultsSummary(null)
     try {
-      // Get all robot slugs from DB
-      const slugsRes = await fetch('/api/admin/robots', { headers: { authorization: `Bearer ${password}` } })
-      let slugs: string[] = []
-      if (slugsRes.ok) {
-        const robotData = await slugsRes.json()
-        slugs = robotData.map((r: any) => r.slug)
-      }
-      if (!slugs.length) {
-        slugs = ['maccabot','trampoline','control-freak','split-decision','power-off','power-on','joyful-timeline','twitch','tinkerbot','sarissa','last-minute','last-second','fart','salt-and-pepper']
-      }
+      const slugs = robots.length
+        ? robots.map((r: any) => r.slug)
+        : ['maccabot','trampoline','control-freak','split-decision','power-off','power-on','joyful-timeline','twitch','tinkerbot','sarissa','last-minute','last-second','fart','salt-and-pepper','dumb-and-dumber']
       let totalResults = 0, totalHighlights = 0, totalFixed = 0
-      const lines: string[] = []
-      for (const slug of slugs) {
-        const res = await fetch(`/api/cron/sync-robot-results?slug=${slug}`, { headers: { authorization: `Bearer ${password}` } })
+      for (let i = 0; i < slugs.length; i++) {
+        setResultsSummary(`Syncing... ${i + 1}/${slugs.length}: ${slugs[i]}`)
+        const res = await fetch(`/api/cron/sync-robot-results?slug=${slugs[i]}`, { headers: { authorization: `Bearer ${password}` } })
         const data = await res.json()
         totalResults += data.totalResults || 0
         totalHighlights += data.totalHighlights || 0
         totalFixed += data.fixedDates || 0
-        const perRobot = data.perRobot || {}
-        Object.entries(perRobot).forEach(([name, count]) => lines.push(`${name}: ${count}`))
-        setResultsSummary(`Syncing... ${lines.length}/${slugs.length} robots done`)
         await new Promise(r => setTimeout(r, 1500))
       }
-      // Also sync NHRL data
-      setResultsSummary(`Syncing NHRL data...`)
+      setResultsSummary(`Syncing NHRL...`)
       const nhrlRes = await fetch('/api/cron/sync-nhrl', { headers: { authorization: `Bearer ${password}` } })
       const nhrlData = await nhrlRes.json()
-      setResultsSummary(`✅ Done! ${totalResults} results, ${totalHighlights} highlights, ${totalFixed} dates fixed | NHRL: ${nhrlData.eventsAdded ?? 0} events added, ${nhrlData.resultsAdded ?? 0} results added`)
+      setResultsSummary(`✅ Done! ${totalResults} results, ${totalHighlights} highlights, ${totalFixed} dates fixed | NHRL: ${nhrlData.eventsAdded ?? 0} added, ${nhrlData.resultsAdded ?? 0} results`)
     } finally { setSyncing(false) }
   }
 
@@ -86,7 +94,7 @@ export default function AdminPage() {
     <div className="max-w-4xl mx-auto px-4 py-12">
       <div className="flex items-center justify-between mb-8">
         <h1 className="section-title mb-0">Admin Panel</h1>
-        <button onClick={triggerSync} disabled={syncing}
+        <button onClick={triggerSync} disabled={syncing || !!syncingSlug}
           className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
           <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
           {syncing ? 'Syncing...' : 'Sync Everything'}
@@ -94,7 +102,27 @@ export default function AdminPage() {
       </div>
 
       {resultsSummary && (
-        <div className="mb-8 card p-4 text-sm text-green-400 whitespace-pre-wrap">{resultsSummary}</div>
+        <div className="mb-6 card p-4 text-sm text-green-400 whitespace-pre-wrap">{resultsSummary}</div>
+      )}
+
+      {/* Per-bot sync buttons */}
+      {robots.length > 0 && (
+        <section className="mb-10">
+          <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
+            <Cpu size={16} className="text-orange-400" /> Sync Individual Bot
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {robots.map((robot: any) => (
+              <button key={robot.slug}
+                onClick={() => syncOneBot(robot.slug)}
+                disabled={syncing || syncingSlug === robot.slug}
+                className="flex items-center gap-1.5 text-xs border border-[#2a2a2a] text-gray-300 hover:border-orange-500 hover:text-orange-400 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40">
+                <RefreshCw size={11} className={syncingSlug === robot.slug ? 'animate-spin' : ''} />
+                {robot.name}
+              </button>
+            ))}
+          </div>
+        </section>
       )}
 
       <section className="mb-10">
