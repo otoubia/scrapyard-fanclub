@@ -3,14 +3,24 @@ import { ROBOTS_SEED } from '@/lib/robots-data'
 import Link from 'next/link'
 import { Cpu } from 'lucide-react'
 
-export const revalidate = 3600
+export const revalidate = 300
 
 export default async function RobotsPage() {
   let robots: any[] = []
   try {
     const supabase = await createClient()
-    const { data } = await supabase.from('robots').select('*').eq('active', true).order('name')
-    robots = data ?? []
+    const [robotsRes, countsRes] = await Promise.all([
+      supabase.from('robots').select('*').eq('active', true),
+      supabase.from('robot_results').select('robot_id'),
+    ])
+    const counts: Record<string, number> = {}
+    for (const r of countsRes.data ?? []) {
+      counts[r.robot_id] = (counts[r.robot_id] ?? 0) + 1
+    }
+    robots = (robotsRes.data ?? []).sort((a: any, b: any) => {
+      const diff = (counts[b.id] ?? 0) - (counts[a.id] ?? 0)
+      return diff !== 0 ? diff : a.name.localeCompare(b.name)
+    })
   } catch {}
 
   const displayRobots = robots.length > 0 ? robots : ROBOTS_SEED.map((r, i) => ({ ...r, id: i.toString(), active: true, created_at: '' }))
