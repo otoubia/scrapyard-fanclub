@@ -357,15 +357,30 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 6. Add upcoming Open events (not Pro Tour) for all NHRL bots
+  // 6. Add upcoming events for NHRL bots
+  // For Open events: all bots compete
+  // For Pro Tour events: only bots that have competed in a Pro Tour this season qualify
   const now = new Date()
+  const currentYear = now.getFullYear()
+
+  // Determine which bots have competed in Pro Tour events this season
+  const proTourBotIds = new Set<string>()
+  for (const robot of nhrlRobots) {
+    const fights = botFightsMap[robot.id] ?? []
+    const hasProTour = fights.some(f =>
+      /pro/i.test(f.tournamentId) && f.tournamentId.includes(String(currentYear).slice(2))
+    )
+    if (hasProTour) proTourBotIds.add(robot.id)
+  }
+
   for (const ev of upcomingFromWebsite) {
     if (!ev.date || new Date(ev.date) <= now) continue
-    // Skip Pro Tour events — only qualified bots attend those
-    if (/pro tour/i.test(ev.title)) continue
+    const isProTour = /pro tour/i.test(ev.title)
     const { data: eventRow } = await supabase.from('events').select('id').eq('external_id', ev.external_id).single()
     if (!eventRow) continue
     for (const robot of nhrlRobots) {
+      // For Pro Tour: only add bots that competed in a Pro Tour this season
+      if (isProTour && !proTourBotIds.has(robot.id)) continue
       const { data: existing } = await supabase.from('robot_results').select('id')
         .eq('robot_id', robot.id).eq('event_id', eventRow.id).single()
       if (!existing) {
