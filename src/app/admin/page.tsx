@@ -9,7 +9,6 @@ export default function AdminPage() {
   const [posts, setPosts] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
-  const [syncingResults, setSyncingResults] = useState(false)
   const [resultsSummary, setResultsSummary] = useState<string | null>(null)
 
   async function fetchPosts(secret: string) {
@@ -33,18 +32,9 @@ export default function AdminPage() {
 
   async function triggerSync() {
     setSyncing(true)
-    try {
-      await fetch('/api/cron/sync-events', { headers: { authorization: `Bearer ${password}` } })
-    } finally { setSyncing(false) }
-  }
-
-  async function triggerRobotResultsSync() {
-    setSyncingResults(true)
     setResultsSummary(null)
-    // Fetch robot list first, then sync one at a time to avoid timeout
     try {
-      const robotsRes = await fetch('/api/admin/posts', { headers: { authorization: `Bearer ${password}` } })
-      // Get slugs from robots endpoint instead
+      // Get all robot slugs from DB
       const slugsRes = await fetch('/api/admin/robots', { headers: { authorization: `Bearer ${password}` } })
       let slugs: string[] = []
       if (slugsRes.ok) {
@@ -52,24 +42,23 @@ export default function AdminPage() {
         slugs = robotData.map((r: any) => r.slug)
       }
       if (!slugs.length) {
-        // Fallback: hardcoded slugs
-        slugs = ['maccabot','trampoline','control-freak','split-decision','power-off','power-on','joyful-timeline','twitch','tinkerbot','sarissa','last-minute','last-second','fart']
+        slugs = ['maccabot','trampoline','control-freak','split-decision','power-off','power-on','joyful-timeline','twitch','tinkerbot','sarissa','last-minute','last-second','fart','salt-and-pepper']
       }
-      let totalResults = 0, totalHighlights = 0
+      let totalResults = 0, totalHighlights = 0, totalFixed = 0
       const lines: string[] = []
       for (const slug of slugs) {
         const res = await fetch(`/api/cron/sync-robot-results?slug=${slug}`, { headers: { authorization: `Bearer ${password}` } })
         const data = await res.json()
         totalResults += data.totalResults || 0
         totalHighlights += data.totalHighlights || 0
+        totalFixed += data.fixedDates || 0
         const perRobot = data.perRobot || {}
         Object.entries(perRobot).forEach(([name, count]) => lines.push(`${name}: ${count}`))
-        setResultsSummary(`Syncing... ${lines.join(', ')}`)
-        // Small delay between robots to avoid rate limiting RCE
+        setResultsSummary(`Syncing... ${lines.length}/${slugs.length} robots done`)
         await new Promise(r => setTimeout(r, 1500))
       }
-      setResultsSummary(`Done! ${totalResults} results, ${totalHighlights} highlights\n${lines.join(', ')}`)
-    } finally { setSyncingResults(false) }
+      setResultsSummary(`✅ Done! ${totalResults} results, ${totalHighlights} highlights, ${totalFixed} event dates fixed`)
+    } finally { setSyncing(false) }
   }
 
   if (!authed) {
@@ -93,18 +82,11 @@ export default function AdminPage() {
     <div className="max-w-4xl mx-auto px-4 py-12">
       <div className="flex items-center justify-between mb-8">
         <h1 className="section-title mb-0">Admin Panel</h1>
-        <div className="flex gap-2 flex-wrap">
-          <button onClick={triggerSync} disabled={syncing}
-            className="flex items-center gap-2 border border-orange-500 text-orange-500 hover:bg-orange-500/10 px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
-            <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
-            {syncing ? 'Syncing...' : 'Sync Events'}
-          </button>
-          <button onClick={triggerRobotResultsSync} disabled={syncingResults}
-            className="flex items-center gap-2 border border-yellow-500 text-yellow-500 hover:bg-yellow-500/10 px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
-            <RefreshCw size={14} className={syncingResults ? 'animate-spin' : ''} />
-            {syncingResults ? 'Syncing...' : 'Sync Robot Results'}
-          </button>
-        </div>
+        <button onClick={triggerSync} disabled={syncing}
+          className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
+          <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+          {syncing ? 'Syncing...' : 'Sync Everything'}
+        </button>
       </div>
 
       {resultsSummary && (
