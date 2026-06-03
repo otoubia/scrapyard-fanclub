@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { CheckCircle, XCircle, Clock, RefreshCw, Cpu } from 'lucide-react'
+import { useState } from 'react'
+import { CheckCircle, XCircle, Clock, RefreshCw, Cpu, Calendar, Plus, Trash2 } from 'lucide-react'
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
@@ -12,6 +12,8 @@ export default function AdminPage() {
   const [syncing, setSyncing] = useState(false)
   const [syncingSlug, setSyncingSlug] = useState<string | null>(null)
   const [resultsSummary, setResultsSummary] = useState<string | null>(null)
+  const [regData, setRegData] = useState<{ events: any[], robots: any[], registrations: Record<string, {resultId: string, robotId: string}[]> } | null>(null)
+  const [regLoading, setRegLoading] = useState(false)
 
   async function fetchPosts(secret: string) {
     setLoading(true)
@@ -20,10 +22,27 @@ export default function AdminPage() {
       if (!res.ok) { setAuthed(false); return }
       setPosts(await res.json())
       setAuthed(true)
-      // Also fetch robot list
       const robotsRes = await fetch('/api/admin/robots', { headers: { authorization: `Bearer ${secret}` } })
       if (robotsRes.ok) setRobots(await robotsRes.json())
+      fetchRegistrations(secret)
     } finally { setLoading(false) }
+  }
+
+  async function fetchRegistrations(secret: string) {
+    setRegLoading(true)
+    try {
+      const res = await fetch('/api/admin/registrations', { headers: { authorization: `Bearer ${secret}` } })
+      if (res.ok) setRegData(await res.json())
+    } finally { setRegLoading(false) }
+  }
+
+  async function toggleRegistration(robotId: string, eventId: string, isRegistered: boolean) {
+    await fetch('/api/admin/registrations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', authorization: `Bearer ${password}` },
+      body: JSON.stringify({ action: isRegistered ? 'remove' : 'add', robotId, eventId }),
+    })
+    fetchRegistrations(password)
   }
 
   async function handleApprove(id: string, approved: boolean) {
@@ -104,6 +123,50 @@ export default function AdminPage() {
       {resultsSummary && (
         <div className="mb-6 card p-4 text-sm text-green-400 whitespace-pre-wrap">{resultsSummary}</div>
       )}
+
+      {/* Upcoming Event Registrations */}
+      <section className="mb-10">
+        <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+          <Calendar size={16} className="text-blue-400" /> Upcoming Event Registrations
+        </h2>
+        {regLoading && <p className="text-gray-500 text-sm">Loading...</p>}
+        {regData && regData.events.length === 0 && <p className="text-gray-500 text-sm">No upcoming events.</p>}
+        {regData && regData.events.length > 0 && (
+          <div className="flex flex-col gap-4">
+            {regData.events.map((event: any) => {
+              const regs = regData.registrations[event.id] ?? []
+              const registeredIds = new Set(regs.map((r: any) => r.robotId))
+              return (
+                <div key={event.id} className="card p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="font-semibold text-sm">{event.title}</p>
+                      <p className="text-xs text-gray-500">{event.start_date ? new Date(event.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''} · {event.event_source?.toUpperCase()}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {regData.robots.map((robot: any) => {
+                      const isReg = registeredIds.has(robot.id)
+                      return (
+                        <button key={robot.id}
+                          onClick={() => toggleRegistration(robot.id, event.id, isReg)}
+                          className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                            isReg
+                              ? 'bg-orange-500/20 border-orange-500 text-orange-400 hover:bg-red-500/20 hover:border-red-500 hover:text-red-400'
+                              : 'bg-[#1a1a1a] border-[#2a2a2a] text-gray-500 hover:border-orange-500 hover:text-orange-400'
+                          }`}>
+                          {isReg ? <Trash2 size={9} /> : <Plus size={9} />}
+                          {robot.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
 
       {/* Per-bot sync buttons */}
       {robots.length > 0 && (
