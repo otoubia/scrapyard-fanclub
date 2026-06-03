@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/server'
 
 function checkAuth(req: NextRequest) {
@@ -259,7 +260,11 @@ export async function GET(req: NextRequest) {
     }
 
     summary[robot.name] = robotResults
+
+    // Immediately invalidate the robot's page cache
+    revalidatePath(`/robots/${robot.slug}`)
   }
 
+  revalidatePath('/')
   return NextResponse.json({ ok: true, totalResults, totalHighlights, perRobot: summary })
 }

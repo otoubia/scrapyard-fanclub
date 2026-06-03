@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { Cpu, Trophy, Calendar } from 'lucide-react'
 import { formatDateShort } from '@/lib/utils'
 
-export const revalidate = 3600
+export const revalidate = 300
 
 export default async function RobotPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
