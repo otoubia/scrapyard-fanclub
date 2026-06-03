@@ -17,7 +17,7 @@ export default async function HomePage() {
       supabase.from('events').select('*, external_id').order('start_date', { ascending: false }).limit(100),
       supabase.from('highlights').select('*, robot:robots(*), event:events(*)').order('created_at', { ascending: false }),
       supabase.from('media').select('*, robot:robots(*), event:events(*)').eq('approved', true).order('created_at', { ascending: false }).limit(12),
-      supabase.from('robots').select('*').eq('active', true).order('name'),
+      supabase.from('robots').select('*, robot_results(count)').eq('active', true),
       supabase.from('posts').select('*').eq('approved', true).order('created_at', { ascending: false }).limit(6),
       supabase.from('robot_results').select('event_id, robot:robots(name, slug)').is('placement', null),
     ])
@@ -27,7 +27,12 @@ export default async function HomePage() {
       new Date(b.event?.start_date ?? 0).getTime() - new Date(a.event?.start_date ?? 0).getTime()
     )
     media = mediaRes.data ?? []
-    robots = robotsRes.data ?? []
+    // Sort robots by number of events attended (most to least)
+    robots = (robotsRes.data ?? []).sort((a: any, b: any) => {
+      const aCount = a.robot_results?.[0]?.count ?? 0
+      const bCount = b.robot_results?.[0]?.count ?? 0
+      return bCount - aCount
+    })
     posts = postsRes.data ?? []
 
     // Build a map of event_id → competing robots
