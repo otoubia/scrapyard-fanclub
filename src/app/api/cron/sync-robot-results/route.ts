@@ -6,64 +6,52 @@ function checkAuth(req: NextRequest) {
   return secret === `Bearer ${process.env.CRON_SECRET}` || secret === `Bearer ${process.env.ADMIN_SECRET}`
 }
 
-// Parse the RCE robot page HTML and extract event results
-// Each result line looks like: "Event Name: W-L (Nth Place)"
-function parseRCEPage(html: string): { overall: string, results: ParsedResult[] } {
-  // Strip HTML tags to get plain text
-  const text = html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, ' ')
+const YEARS = [2023, 2024, 2025, 2026]
 
-  const results: ParsedResult[] = []
+interface TableRow {
+  eventName: string
+  rceEventId: string
+  place: number  // 0 = no placement
+}
 
-  // Match lines like "Event Name: 3-2 (5th Place)" or "Event Name: 4-0 (1st Place)"
-  const resultRegex = /([A-Za-z0-9][^:]{3,80}):\s*(\d+)-(\d+)\s*\((\d+(?:st|nd|rd|th)\s+Place)\)/gi
-  let match
-  while ((match = resultRegex.exec(text)) !== null) {
-    const name = match[1].trim()
-    const wins = parseInt(match[2])
-    const losses = parseInt(match[3])
-    const placement = match[4].trim()
-    // Skip obviously bad matches
-    if (name.length > 100 || name.includes('{')) continue
-    results.push({ name, wins, losses, placement })
+// Parse the history table from raw HTML
+function parseHistoryTable(html: string): TableRow[] {
+  const rows: TableRow[] = []
+  // Match each <tr class="history-tr">...</tr>
+  const trRegex = /<tr[^>]*class="[^"]*history-tr[^"]*"[^>]*>([\s\S]*?)<\/tr>/gi
+  let trMatch
+  while ((trMatch = trRegex.exec(html)) !== null) {
+    const rowHtml = trMatch[1]
+    // Extract event name and RCE event ID from first <td>
+    const eventLinkMatch = rowHtml.match(/href="\/events\/(\d+)"[^>]*>([\s\S]*?)<\/a>/)
+    if (!eventLinkMatch) continue
+    const rceEventId = eventLinkMatch[1]
+    const eventName = eventLinkMatch[2].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+    // Extract place from second <td> — look for a number link or just a number
+    const tds = rowHtml.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || []
+    if (tds.length < 2) continue
+    const placeText = tds[1].replace(/<[^>]+>/g, '').trim()
+    const place = parseInt(placeText) || 0
+    if (eventName) rows.push({ eventName, rceEventId, place })
   }
-
-  // Extract overall record e.g. "32-31"
-  const overallMatch = text.match(/Overall Performance[:\s]+(\d+-\d+)/)
-  const overall = overallMatch ? overallMatch[1] : ''
-
-  return { overall, results }
+  return rows
 }
 
-interface ParsedResult {
-  name: string
-  wins: number
-  losses: number
-  placement: string
+// Extract bot image URL from HTML
+function parseImageUrl(html: string): string | null {
+  const m = html.match(/https:\/\/robotcombatevents\.s3\.amazonaws\.com\/uploads\/resource\/photo\/[^\s"']+/)
+  return m ? m[0] : null
 }
 
-function placementRank(placement: string): number {
-  const m = placement.match(/(\d+)/)
-  return m ? parseInt(m[1]) : 99
+function ordinal(n: number): string {
+  if (n === 1) return '1st Place'
+  if (n === 2) return '2nd Place'
+  if (n === 3) return '3rd Place'
+  return `${n}th Place`
 }
 
-function isPodium(placement: string): boolean {
-  return placementRank(placement) <= 3
-}
-
-function podiumType(placement: string): 'podium' | 'knockout' | 'other' {
-  const rank = placementRank(placement)
-  if (rank === 1) return 'podium'
-  if (rank <= 3) return 'podium'
-  return 'other'
+function isPodium(place: number): boolean {
+  return place >= 1 && place <= 3
 }
 
 export async function GET(req: NextRequest) {
@@ -71,53 +59,79 @@ export async function GET(req: NextRequest) {
 
   const supabase = await createServiceClient()
 
-  // Get all robots with an RCE URL
   const { data: robots } = await supabase
     .from('robots')
     .select('id, name, slug, rce_url')
     .not('rce_url', 'is', null)
 
-  if (!robots?.length) return NextResponse.json({ error: 'No robots with rce_url found' }, { status: 400 })
+  if (!robots?.length) return NextResponse.json({ error: 'No robots with rce_url' }, { status: 400 })
 
   const summary: Record<string, number> = {}
   let totalResults = 0
   let totalHighlights = 0
 
   for (const robot of robots) {
+    let robotResults = 0
+    let robotHighlights = 0
+
     try {
-      const res = await fetch(robot.rce_url, { next: { revalidate: 0 } })
-      if (!res.ok) { summary[robot.name] = 0; continue }
-      const html = await res.text()
-      const { results } = parseRCEPage(html)
+      // Fetch all years in parallel
+      const pages = await Promise.all(
+        YEARS.map(year =>
+          fetch(`${robot.rce_url}?year=${year}`, { next: { revalidate: 0 } })
+            .then(r => r.ok ? r.text() : '')
+            .catch(() => '')
+        )
+      )
 
-      if (!results.length) { summary[robot.name] = 0; continue }
+      // Extract and update image URL from the first page that has one
+      for (const html of pages) {
+        const imageUrl = parseImageUrl(html)
+        if (imageUrl) {
+          await supabase.from('robots').update({ image_url: imageUrl }).eq('id', robot.id)
+          break
+        }
+      }
 
-      let robotResults = 0
-      let robotHighlights = 0
+      // Collect all unique event results across all years
+      const allRows: TableRow[] = []
+      const seenEventIds = new Set<string>()
+      for (const html of pages) {
+        for (const row of parseHistoryTable(html)) {
+          if (!seenEventIds.has(row.rceEventId)) {
+            seenEventIds.add(row.rceEventId)
+            allRows.push(row)
+          }
+        }
+      }
 
-      for (const r of results) {
-        // Upsert the event
-        const eventExternalId = `rce-bot-event:${r.name.toLowerCase().replace(/\s+/g, '-')}`
+      for (const row of allRows) {
+        // Skip events with no placement yet (place = 0, i.e. future/unresolved)
+        // We still record them so we have a full history
+        const placement = row.place > 0 ? ordinal(row.place) : null
+        const externalId = `rce-event:${row.rceEventId}`
+
+        // Upsert event
         let eventId: string | null = null
-
         const { data: existingEvent } = await supabase
           .from('events')
           .select('id')
           .eq('event_source', 'rce_robot')
-          .eq('external_id', eventExternalId)
+          .eq('external_id', externalId)
           .single()
 
         if (existingEvent) {
           eventId = existingEvent.id
+          await supabase.from('events').update({ title: row.eventName, updated_at: new Date().toISOString() }).eq('id', eventId)
         } else {
           const { data: newEvent } = await supabase
             .from('events')
             .insert({
-              title: r.name,
+              title: row.eventName,
               event_source: 'rce_robot',
-              external_id: eventExternalId,
-              status: 'past',
-              start_date: new Date('2020-01-01').toISOString(), // placeholder; no date on RCE bot pages
+              external_id: externalId,
+              status: row.place > 0 ? 'past' : 'upcoming',
+              start_date: new Date('2020-01-01').toISOString(),
               updated_at: new Date().toISOString(),
             })
             .select('id')
@@ -135,21 +149,23 @@ export async function GET(req: NextRequest) {
           .eq('event_id', eventId)
           .single()
 
+        const resultData = {
+          wins: 0,
+          losses: 0,
+          placement,
+          is_highlight: isPodium(row.place),
+        }
+
         if (existingResult) {
-          await supabase
-            .from('robot_results')
-            .update({ wins: r.wins, losses: r.losses, placement: r.placement, is_highlight: isPodium(r.placement) })
-            .eq('id', existingResult.id)
+          await supabase.from('robot_results').update(resultData).eq('id', existingResult.id)
         } else {
-          await supabase
-            .from('robot_results')
-            .insert({ robot_id: robot.id, event_id: eventId, wins: r.wins, losses: r.losses, placement: r.placement, is_highlight: isPodium(r.placement) })
+          await supabase.from('robot_results').insert({ robot_id: robot.id, event_id: eventId, ...resultData })
         }
         robotResults++
         totalResults++
 
-        // Create highlight for podium finishes
-        if (isPodium(r.placement)) {
+        // Highlight for podium finishes
+        if (isPodium(row.place)) {
           const { data: existingHighlight } = await supabase
             .from('highlights')
             .select('id')
@@ -159,22 +175,23 @@ export async function GET(req: NextRequest) {
 
           if (!existingHighlight) {
             await supabase.from('highlights').insert({
-              title: `${robot.name} — ${r.placement} at ${r.name}`,
-              description: `${r.wins}-${r.losses} record, finished ${r.placement}`,
+              title: `${robot.name} — ${placement} at ${row.eventName}`,
+              description: `Finished ${placement}`,
               robot_id: robot.id,
               event_id: eventId,
-              type: podiumType(r.placement),
+              type: row.place === 1 ? 'podium' : 'podium',
             })
             robotHighlights++
             totalHighlights++
           }
         }
       }
-
-      summary[robot.name] = robotResults
     } catch (err) {
       summary[robot.name] = -1
+      continue
     }
+
+    summary[robot.name] = robotResults
   }
 
   return NextResponse.json({ ok: true, totalResults, totalHighlights, perRobot: summary })
