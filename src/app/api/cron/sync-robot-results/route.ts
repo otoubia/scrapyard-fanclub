@@ -88,6 +88,7 @@ export async function GET(req: NextRequest) {
   if (!robots?.length) return NextResponse.json({ error: 'No robots with rce_url' }, { status: 400 })
 
   const summary: Record<string, number> = {}
+  const debug: Record<string, any> = {}
   let totalResults = 0
   let totalHighlights = 0
 
@@ -117,14 +118,18 @@ export async function GET(req: NextRequest) {
       // Collect all unique event rows across all years
       const allRows: TableRow[] = []
       const seenEventIds = new Set<string>()
+      const rowsPerYear: number[] = []
       for (const html of pages) {
-        for (const row of parseHistoryTable(html)) {
+        const parsed = parseHistoryTable(html)
+        rowsPerYear.push(parsed.length)
+        for (const row of parsed) {
           if (!seenEventIds.has(row.rceEventId)) {
             seenEventIds.add(row.rceEventId)
             allRows.push(row)
           }
         }
       }
+      debug[robot.slug] = { rowsPerYear, totalRows: allRows.length }
 
       // Load all existing events and results for this robot in one query
       const externalIds = allRows.map(r => `rce-event:${r.rceEventId}`)
@@ -266,5 +271,5 @@ export async function GET(req: NextRequest) {
   }
 
   revalidatePath('/')
-  return NextResponse.json({ ok: true, totalResults, totalHighlights, perRobot: summary })
+  return NextResponse.json({ ok: true, totalResults, totalHighlights, perRobot: summary, debug })
 }
