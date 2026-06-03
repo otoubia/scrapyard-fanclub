@@ -65,6 +65,8 @@ export default function AdminPage() {
         const perRobot = data.perRobot || {}
         Object.entries(perRobot).forEach(([name, count]) => lines.push(`${name}: ${count}`))
         setResultsSummary(`Syncing... ${lines.join(', ')}`)
+        // Small delay between robots to avoid rate limiting RCE
+        await new Promise(r => setTimeout(r, 1500))
       }
       setResultsSummary(`Done! ${totalResults} results, ${totalHighlights} highlights\n${lines.join(', ')}`)
     } finally { setSyncingResults(false) }
