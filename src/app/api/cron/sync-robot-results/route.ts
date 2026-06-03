@@ -41,7 +41,7 @@ function parseImageUrl(html: string): string | null {
 function parseEventPage(html: string): { startDate: string | null, location: string | null } {
   const locMatch = html.match(/Location:<\/strong>\s*([^<]+)/)
   const location = locMatch ? locMatch[1].trim() : null
-  const dateMatch = html.match(/Date:<\/strong>\s*([^<]+)/)
+  const dateMatch = html.match(/Dates?:<\/strong>\s*([^<]+)/)
   let startDate: string | null = null
   if (dateMatch) {
     const raw = dateMatch[1].trim()
