@@ -4,7 +4,7 @@ export const ROBOTS_SEED = [
     slug: 'maccabot',
     weight_class: '30lb Featherweight',
     weapon_type: 'Spinner',
-    description: 'Team Scrap Yard\'s 30lb featherweight spinner.',
+    description: '30lb featherweight spinner.',
     rce_url: 'https://www.robotcombatevents.com/groups/2570/resources/20462',
   },
   {
@@ -12,7 +12,7 @@ export const ROBOTS_SEED = [
     slug: 'trampoline',
     weight_class: '1lb Plastic Antweight',
     weapon_type: 'Spinner',
-    description: 'A bot that likes to bounce. Overall record: 32-31. Two-time 1st place finisher.',
+    description: 'A bot that likes to bounce.',
     rce_url: 'https://www.robotcombatevents.com/groups/2570/resources/9751',
   },
   {
@@ -20,7 +20,7 @@ export const ROBOTS_SEED = [
     slug: 'control-freak',
     weight_class: '1lb Antweight',
     weapon_type: 'Control Bot',
-    description: 'Antweight control bot. Overall record: 25-9. 1st place at GSCRL Mechanical Mayhem.',
+    description: 'Antweight control bot.',
     rce_url: 'https://www.robotcombatevents.com/groups/2570/resources/16240',
   },
   {
@@ -36,7 +36,7 @@ export const ROBOTS_SEED = [
     slug: 'power-off',
     weight_class: '1lb Antweight',
     weapon_type: 'Spinner',
-    description: 'Antweight spinner. Overall record: 4-8.',
+    description: 'Antweight spinner.',
     rce_url: 'https://www.robotcombatevents.com/groups/2570/resources/9233',
   },
   {
@@ -44,7 +44,7 @@ export const ROBOTS_SEED = [
     slug: 'power-on',
     weight_class: '3lb Beetleweight',
     weapon_type: 'Spinner',
-    description: 'Beetleweight spinner. 5th place at GSCRL April Annihilation 2026.',
+    description: 'Beetleweight spinner.',
     rce_url: 'https://www.robotcombatevents.com/groups/2570/resources/12089',
   },
   {
@@ -52,7 +52,7 @@ export const ROBOTS_SEED = [
     slug: 'joyful-timeline',
     weight_class: '1lb Antweight',
     weapon_type: 'Spinner',
-    description: 'Antweight spinner. 2nd place at GSCRL April Annihilation 2026 (14.25 pts).',
+    description: 'Antweight spinner.',
     rce_url: 'https://www.robotcombatevents.com/groups/2570/resources/24396',
   },
   {
@@ -60,7 +60,7 @@ export const ROBOTS_SEED = [
     slug: 'twitch',
     weight_class: '150g Fairyweight',
     weapon_type: 'Spinner',
-    description: 'Mini impulse fairyweight spinner. 1st place at GSCRL April Annihilation 2026.',
+    description: 'Mini impulse fairyweight spinner.',
     rce_url: 'https://www.robotcombatevents.com/groups/2570/resources/21147',
   },
   {
@@ -68,7 +68,7 @@ export const ROBOTS_SEED = [
     slug: 'tinkerbot',
     weight_class: '150g Fairyweight',
     weapon_type: 'Unknown',
-    description: 'Fairyweight competitor. 2nd place at GSCRL Mechanical Mayhem 2026.',
+    description: 'Fairyweight competitor.',
     rce_url: 'https://www.robotcombatevents.com/groups/2570/resources/18253',
   },
   {
@@ -84,7 +84,7 @@ export const ROBOTS_SEED = [
     slug: 'last-minute',
     weight_class: '1lb Plastic Antweight',
     weapon_type: 'Spinner',
-    description: 'Plastic antweight spinner. 3rd place at GSCRL April Annihilation 2026.',
+    description: 'Plastic antweight spinner.',
     rce_url: 'https://www.robotcombatevents.com/groups/2570/resources/11960',
   },
   {
@@ -92,7 +92,7 @@ export const ROBOTS_SEED = [
     slug: 'last-second',
     weight_class: '150g Fairyweight',
     weapon_type: 'Spinner',
-    description: 'Fairyweight spinner. 3rd place at GSCRL April Annihilation 2026.',
+    description: 'Fairyweight spinner.',
     rce_url: 'https://www.robotcombatevents.com/groups/2570/resources/26988',
   },
   {
@@ -100,7 +100,7 @@ export const ROBOTS_SEED = [
     slug: 'fart',
     weight_class: '1lb Antweight',
     weapon_type: 'Spinner',
-    description: 'Antweight spinner competing in the GSCRL circuit.',
+    description: 'Antweight spinner.',
     rce_url: 'https://www.robotcombatevents.com/groups/2570/resources/25978',
   },
   {
