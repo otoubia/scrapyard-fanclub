@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 
 const BRETTZONE = 'https://brettzone.nhrl.io/brettZone/backend'
 const NHRL_LOCATION = '165 Water St., Norwalk, CT 06854'
+const NHRL_YOUTUBE = 'https://www.youtube.com/@NHRLrobot/live'
 
 function checkAuth(req: NextRequest) {
   const auth = req.headers.get('authorization')
@@ -87,13 +88,13 @@ export async function GET(req: NextRequest) {
     let eventId: string | null = existingEvent?.id ?? null
     if (existingEvent) {
       await supabase.from('events').update({
-        status: 'current', updated_at: new Date().toISOString()
+        status: 'current', livestream_url: NHRL_YOUTUBE, updated_at: new Date().toISOString()
       }).eq('id', eventId)
     } else {
       const { data: newEvent } = await supabase.from('events').insert({
         title: tournamentName, event_source: 'nhrl', external_id: externalId,
         status: 'current', start_date: new Date().toISOString(),
-        location: NHRL_LOCATION, updated_at: new Date().toISOString(),
+        location: NHRL_LOCATION, livestream_url: NHRL_YOUTUBE, updated_at: new Date().toISOString(),
       }).select('id').single()
       eventId = newEvent?.id ?? null
     }
