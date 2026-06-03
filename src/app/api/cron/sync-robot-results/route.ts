@@ -58,11 +58,11 @@ export async function GET(req: NextRequest) {
   if (!checkAuth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const supabase = await createServiceClient()
+  const slugFilter = req.nextUrl.searchParams.get('slug')
 
-  const { data: robots } = await supabase
-    .from('robots')
-    .select('id, name, slug, rce_url')
-    .not('rce_url', 'is', null)
+  let query = supabase.from('robots').select('id, name, slug, rce_url').not('rce_url', 'is', null)
+  if (slugFilter) query = query.eq('slug', slugFilter)
+  const { data: robots } = await query
 
   if (!robots?.length) return NextResponse.json({ error: 'No robots with rce_url' }, { status: 400 })
 

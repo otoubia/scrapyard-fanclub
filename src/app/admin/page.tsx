@@ -41,13 +41,32 @@ export default function AdminPage() {
   async function triggerRobotResultsSync() {
     setSyncingResults(true)
     setResultsSummary(null)
+    // Fetch robot list first, then sync one at a time to avoid timeout
     try {
-      const res = await fetch('/api/cron/sync-robot-results', { headers: { authorization: `Bearer ${password}` } })
-      const data = await res.json()
-      if (data.perRobot) {
-        const lines = Object.entries(data.perRobot).map(([name, count]) => `${name}: ${count} results`)
-        setResultsSummary(`Synced ${data.totalResults} results, ${data.totalHighlights} highlights\n${lines.join(', ')}`)
+      const robotsRes = await fetch('/api/admin/posts', { headers: { authorization: `Bearer ${password}` } })
+      // Get slugs from robots endpoint instead
+      const slugsRes = await fetch('/api/admin/robots', { headers: { authorization: `Bearer ${password}` } })
+      let slugs: string[] = []
+      if (slugsRes.ok) {
+        const robotData = await slugsRes.json()
+        slugs = robotData.map((r: any) => r.slug)
       }
+      if (!slugs.length) {
+        // Fallback: hardcoded slugs
+        slugs = ['maccabot','trampoline','control-freak','split-decision','power-off','power-on','joyful-timeline','twitch','tinkerbot','sarissa','last-minute','last-second','fart']
+      }
+      let totalResults = 0, totalHighlights = 0
+      const lines: string[] = []
+      for (const slug of slugs) {
+        const res = await fetch(`/api/cron/sync-robot-results?slug=${slug}`, { headers: { authorization: `Bearer ${password}` } })
+        const data = await res.json()
+        totalResults += data.totalResults || 0
+        totalHighlights += data.totalHighlights || 0
+        const perRobot = data.perRobot || {}
+        Object.entries(perRobot).forEach(([name, count]) => lines.push(`${name}: ${count}`))
+        setResultsSummary(`Syncing... ${lines.join(', ')}`)
+      }
+      setResultsSummary(`Done! ${totalResults} results, ${totalHighlights} highlights\n${lines.join(', ')}`)
     } finally { setSyncingResults(false) }
   }
 
