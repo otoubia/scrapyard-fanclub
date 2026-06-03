@@ -67,6 +67,51 @@ function getPlacementFromBracket(rounds: BracketRound[], botName: string): { pla
   return { placement: '5th-8th Place (Prime Time)', isPrimetime: true }
 }
 
+interface BotFight {
+  tournamentId: string
+  tournamentName: string
+  botIsRed: boolean
+  won: boolean
+  winType: string
+}
+
+// Parse fightsByBot.php to get complete fight history with tournament IDs
+function parseFightsByBot(html: string, botCleanName: string): BotFight[] {
+  const fights: BotFight[] = []
+  // Each row: <tr>...<td>matchId</td><td><a href="...tournamentID=X">Name</a></td>...
+  const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+  let m
+  while ((m = rowRegex.exec(html)) !== null) {
+    const row = m[1]
+    const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(c =>
+      c[1].replace(/<[^>]+>/g, '').trim()
+    )
+    if (cells.length < 8) continue
+
+    // Extract tournament ID from href
+    const hrefMatch = row.match(/tournamentID=([a-zA-Z0-9_-]+)/)
+    if (!hrefMatch) continue
+    const tournamentId = hrefMatch[1]
+    const tournamentName = cells[1]
+
+    // Determine if bot was red or blue
+    const redBot = cells[3]?.toLowerCase().replace(/\s+/g, '')
+    const blueBot = cells[4]?.toLowerCase().replace(/\s+/g, '')
+    const clean = botCleanName.toLowerCase()
+    const botIsRed = redBot === clean || cells[3]?.toLowerCase().includes(botCleanName.toLowerCase())
+
+    // Determine winner
+    const winner = cells[5]?.toLowerCase() // 'red' or 'blue'
+    const won = botIsRed ? winner === 'red' : winner === 'blue'
+    const winType = cells[6] ?? ''
+
+    if (tournamentId && (winner === 'red' || winner === 'blue')) {
+      fights.push({ tournamentId, tournamentName, botIsRed, won, winType })
+    }
+  }
+  return fights
+}
+
 function checkAuth(req: NextRequest) {
   const secret = req.headers.get('authorization')
   return secret === `Bearer ${process.env.CRON_SECRET}` || secret === `Bearer ${process.env.ADMIN_SECRET}`
@@ -202,183 +247,132 @@ export async function GET(req: NextRequest) {
   const { data: allRobots } = await supabase.from('robots').select('id, name, slug, stats').eq('active', true)
   const nhrlRobots = (allRobots ?? []).filter(r => r.stats?.nhrl_clean_name)
 
-  // Add robot_results entries for upcoming NHRL events so bots show as competing
+  // Build a lookup: tournamentID → tournament data (for dates)
+  const tournamentById = new Map(allTournaments.map(t => [t.tournamentID, t]))
+
+  // 4. Fetch career stats + fight history for each NHRL bot in parallel
+  const botStatsMap: Record<string, any> = {}
+  const botFightsMap: Record<string, BotFight[]> = {}
+  await Promise.all(nhrlRobots.map(async robot => {
+    const cleanName = robot.stats.nhrl_clean_name
+    try {
+      const [statsRes, fightsRes] = await Promise.all([
+        fetch(`${NHRL_BASE}/stats/bot/${cleanName}`, { next: { revalidate: 0 } }),
+        fetch(`https://brettzone.nhrl.io/brettZone/fightsByBot.php?bot=${cleanName}`, { next: { revalidate: 0 } }),
+      ])
+      if (statsRes.ok) botStatsMap[robot.id] = (await statsRes.json()).botStats
+      if (fightsRes.ok) botFightsMap[robot.id] = parseFightsByBot(await fightsRes.text(), cleanName)
+    } catch {}
+  }))
+
+  // 5. Process each bot using fightsByBot as source of truth
+  let eventsAdded = 0, eventsUpdated = 0, resultsAdded = 0
+
+  // Delete ALL existing NHRL robot_results for NHRL bots so we start clean
+  // (avoids stale entries from wrong tournament assignments)
+  const nhrlEventIds = (await supabase.from('events').select('id').eq('event_source', 'nhrl')).data?.map(e => e.id) ?? []
+  if (nhrlEventIds.length > 0) {
+    await supabase.from('robot_results')
+      .delete()
+      .in('event_id', nhrlEventIds)
+      .in('robot_id', nhrlRobots.map(r => r.id))
+  }
+
+  for (const robot of nhrlRobots) {
+    const cleanName = robot.stats.nhrl_clean_name
+    const botStats = botStatsMap[robot.id]
+    const fights = botFightsMap[robot.id] ?? []
+
+    // Group fights by tournament → calculate W/L
+    const byTournament = new Map<string, { name: string, wins: number, losses: number }>()
+    for (const fight of fights) {
+      const t = byTournament.get(fight.tournamentId) ?? { name: fight.tournamentName, wins: 0, losses: 0 }
+      if (fight.won) t.wins++ else t.losses++
+      byTournament.set(fight.tournamentId, t)
+    }
+
+    // Fetch brackets for all tournaments this bot competed in (for placement/Prime Time)
+    const bracketMap = new Map<string, BracketRound[]>()
+    await Promise.all([...byTournament.keys()].map(async tid => {
+      try {
+        const bRes = await fetch(`${NHRL_BRACKET_BASE}?tournamentID=${tid}`, { next: { revalidate: 0 } })
+        if (bRes.ok) bracketMap.set(tid, parseBracketHtml(await bRes.text()))
+      } catch {}
+    }))
+
+    for (const [tournamentId, result] of byTournament) {
+      // Get or create the event
+      const tournament = tournamentById.get(tournamentId)
+      const externalId = `nhrl:${tournamentId}`
+      const date = tournament ? bestDate(tournament) : dateFromTournamentId(tournamentId)
+      const status = date && new Date(date) > new Date() ? 'upcoming' : 'past'
+      const title = tournament?.tournamentName ?? result.name
+
+      const { data: existingEvent } = await supabase
+        .from('events').select('id').eq('event_source', 'nhrl').eq('external_id', externalId).single()
+
+      let eventId: string | null = existingEvent?.id ?? null
+      if (existingEvent) {
+        await supabase.from('events').update({ title, status, updated_at: new Date().toISOString() }).eq('id', eventId)
+        eventsUpdated++
+      } else {
+        const { data: newEvent } = await supabase.from('events').insert({
+          title, event_source: 'nhrl', external_id: externalId,
+          status, start_date: date ?? new Date().toISOString(),
+          location: NHRL_LOCATION, updated_at: new Date().toISOString(),
+        }).select('id').single()
+        eventId = newEvent?.id ?? null
+        if (eventId) eventsAdded++
+      }
+      if (!eventId) continue
+
+      // Get placement from bracket
+      const bracketRounds = bracketMap.get(tournamentId) ?? []
+      const bracketPlacement = getPlacementFromBracket(bracketRounds, cleanName) ??
+        getPlacementFromBracket(bracketRounds, botStats?.botName ?? '')
+
+      await supabase.from('robot_results').insert({
+        robot_id: robot.id, event_id: eventId,
+        wins: result.wins, losses: result.losses,
+        placement: bracketPlacement?.placement ?? null,
+        is_highlight: bracketPlacement?.isPrimetime ?? false,
+        notes: 'NHRL event',
+      })
+      resultsAdded++
+
+      // Prime Time highlight
+      if (bracketPlacement?.isPrimetime) {
+        const { data: existingHighlight } = await supabase.from('highlights').select('id')
+          .eq('robot_id', robot.id).eq('event_id', eventId).single()
+        if (!existingHighlight) {
+          const isPodium = ['1st Place', '2nd Place', '3rd-4th Place'].includes(bracketPlacement.placement)
+          await supabase.from('highlights').insert({
+            title: `${robot.name} — ${bracketPlacement.placement} at ${title}`,
+            description: `Reached Prime Time at NHRL`,
+            robot_id: robot.id, event_id: eventId,
+            type: isPodium ? 'podium' : 'primetime',
+          })
+        }
+      }
+    }
+  }
+
+  // 6. Add upcoming Open events (not Pro Tour) for all NHRL bots
+  const now = new Date()
   for (const ev of upcomingFromWebsite) {
-    if (!ev.date || new Date(ev.date) <= new Date()) continue
-    const { data: eventRow } = await supabase
-      .from('events').select('id').eq('external_id', ev.external_id).single()
+    if (!ev.date || new Date(ev.date) <= now) continue
+    // Skip Pro Tour events — only qualified bots attend those
+    if (/pro tour/i.test(ev.title)) continue
+    const { data: eventRow } = await supabase.from('events').select('id').eq('external_id', ev.external_id).single()
     if (!eventRow) continue
     for (const robot of nhrlRobots) {
-      const { data: existing } = await supabase
-        .from('robot_results').select('id')
+      const { data: existing } = await supabase.from('robot_results').select('id')
         .eq('robot_id', robot.id).eq('event_id', eventRow.id).single()
       if (!existing) {
         await supabase.from('robot_results').insert({
           robot_id: robot.id, event_id: eventRow.id,
           wins: 0, losses: 0, placement: null, is_highlight: false, notes: 'NHRL upcoming',
         })
-      }
-    }
-  }
-
-  // 4. Filter past tournaments to relevant ones
-  const relevant = allTournaments.filter(isRelevantTournament)
-
-  // 4. Fetch career stats for each NHRL bot
-  const botStatsMap: Record<string, any> = {}
-  await Promise.all(nhrlRobots.map(async robot => {
-    const cleanName = robot.stats.nhrl_clean_name
-    try {
-      const res = await fetch(`${NHRL_BASE}/stats/bot/${cleanName}`, { next: { revalidate: 0 } })
-      if (res.ok) {
-        const data = await res.json()
-        botStatsMap[robot.id] = data.botStats
-      }
-    } catch {}
-  }))
-
-  // 5. For each relevant tournament, fetch its stats to check which of our bots competed
-  // We check if our bot names appear in longestFight or shortestFight player names
-  let eventsAdded = 0, eventsUpdated = 0, resultsAdded = 0
-
-  for (const tournament of relevant) {
-    const date = bestDate(tournament)
-    const now = new Date()
-    const status = date
-      ? new Date(date) > now ? 'upcoming' : 'past'
-      : 'past'
-    const externalId = `nhrl:${tournament.tournamentID}`
-
-    // Upsert the event
-    const { data: existingEvent } = await supabase
-      .from('events')
-      .select('id, start_date')
-      .eq('event_source', 'nhrl')
-      .eq('external_id', externalId)
-      .single()
-
-    let eventId: string | null = null
-    const eventData = {
-      title: tournament.tournamentName,
-      event_source: 'nhrl',
-      external_id: externalId,
-      status,
-      start_date: date ?? new Date().toISOString(),
-      location: NHRL_LOCATION,
-      updated_at: new Date().toISOString(),
-    }
-
-    if (existingEvent) {
-      eventId = existingEvent.id
-      await supabase.from('events').update(eventData).eq('id', eventId)
-      eventsUpdated++
-    } else {
-      const { data: newEvent } = await supabase
-        .from('events').insert(eventData).select('id').single()
-      eventId = newEvent?.id ?? null
-      if (eventId) eventsAdded++
-    }
-
-    if (!eventId) continue
-
-    // 6. Fetch tournament stats + bracket in parallel
-    await new Promise(r => setTimeout(r, 200))
-    let tournamentPlayers: string[] = []
-    let bracketRounds: BracketRound[] = []
-    try {
-      const [tRes, bRes] = await Promise.all([
-        fetch(`${NHRL_BASE}/stats/tournament/${tournament.tournamentID}`, { next: { revalidate: 0 } }),
-        fetch(`${NHRL_BRACKET_BASE}?tournamentID=${tournament.tournamentID}`, { next: { revalidate: 0 } }),
-      ])
-      if (tRes.ok) {
-        const tData = await tRes.json()
-        const ts = tData.tournamentStats
-        const names = [
-          ts?.longestFight?.player1, ts?.longestFight?.player2,
-          ts?.shortestFight?.player1, ts?.shortestFight?.player2,
-        ].filter(Boolean).map((n: string) => n.toLowerCase().replace(/\s+/g, ''))
-        tournamentPlayers = names
-      }
-      if (bRes.ok) {
-        const bHtml = await bRes.text()
-        bracketRounds = parseBracketHtml(bHtml)
-        // All players in the bracket definitely competed
-        bracketRounds[0]?.allPlayers.forEach(p =>
-          tournamentPlayers.push(p.toLowerCase().replace(/\s+/g, ''))
-        )
-      }
-    } catch {}
-
-    // 7. For each NHRL bot, check if they competed and upsert robot_result
-    for (const robot of nhrlRobots) {
-      const cleanName = robot.stats.nhrl_clean_name
-      const botStats = botStatsMap[robot.id]
-
-      // Check if bot weight class matches tournament weight class
-      const botWeightClass = botStats?.weightClasses?.[0]
-      if (botWeightClass !== tournament.WeightClass) continue
-
-      // Check if bot appears in this tournament's player list
-      const botAppearsInTournament = tournamentPlayers.includes(cleanName.toLowerCase())
-
-      // Also check: does this tournament appear in bot's known fights?
-      const knownTournaments = [
-        botStats?.longestFight?.tournamentID,
-        botStats?.shortestFight?.tournamentID,
-        ...(botStats?.recentFights ?? []).map((f: any) => f.tournamentID),
-      ].filter(Boolean)
-      const botInThisTournament = botAppearsInTournament || knownTournaments.includes(tournament.tournamentID)
-
-      if (!botInThisTournament) continue
-
-      // Upsert robot_result
-      const { data: existingResult } = await supabase
-        .from('robot_results')
-        .select('id')
-        .eq('robot_id', robot.id)
-        .eq('event_id', eventId)
-        .single()
-
-      // Determine placement from bracket data
-      const bracketPlacement = getPlacementFromBracket(bracketRounds, cleanName) ??
-        getPlacementFromBracket(bracketRounds, botStats?.botName ?? '')
-
-      const resultData = {
-        wins: 0,
-        losses: 0,
-        placement: bracketPlacement?.placement ?? null,
-        is_highlight: bracketPlacement?.isPrimetime ?? false,
-        notes: 'NHRL event',
-      }
-
-      if (existingResult) {
-        // Only update if we have new placement data
-        if (bracketPlacement) {
-          await supabase.from('robot_results').update(resultData).eq('id', existingResult.id)
-        }
-      } else {
-        await supabase.from('robot_results').insert({ robot_id: robot.id, event_id: eventId, ...resultData })
-        resultsAdded++
-      }
-
-      // Create Prime Time highlight
-      if (bracketPlacement?.isPrimetime) {
-        const { data: existingHighlight } = await supabase
-          .from('highlights')
-          .select('id')
-          .eq('robot_id', robot.id)
-          .eq('event_id', eventId)
-          .single()
-        if (!existingHighlight) {
-          const isPodium = ['1st Place', '2nd Place', '3rd-4th Place'].includes(bracketPlacement.placement)
-          await supabase.from('highlights').insert({
-            title: `${robot.name} — ${bracketPlacement.placement} at ${tournament.tournamentName}`,
-            description: `Reached Prime Time at NHRL`,
-            robot_id: robot.id,
-            event_id: eventId,
-            type: isPodium ? 'podium' : 'primetime',
-          })
-        }
       }
     }
   }
