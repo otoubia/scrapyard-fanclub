@@ -270,6 +270,33 @@ export async function GET(req: NextRequest) {
     revalidatePath(`/robots/${robot.slug}`)
   }
 
+  // Second pass: fix any events still stuck on placeholder 2020 dates
+  // These were likely missed due to rate limiting in the first pass
+  const { data: stuckEvents } = await supabase
+    .from('events')
+    .select('id, external_id, title')
+    .eq('event_source', 'rce_robot')
+    .like('start_date', '2020%')
+
+  let fixedDates = 0
+  for (const event of stuckEvents ?? []) {
+    const m = event.external_id?.match(/rce-event:(\d+)/)
+    if (!m) continue
+    // Delay between requests to avoid rate limiting
+    await new Promise(r => setTimeout(r, 800))
+    const details = await fetchEventDetails(m[1])
+    if (details.startDate) {
+      const status = new Date(details.startDate) > new Date() ? 'upcoming' : 'past'
+      await supabase.from('events').update({
+        start_date: details.startDate,
+        location: details.location ?? undefined,
+        status,
+        updated_at: new Date().toISOString(),
+      }).eq('id', event.id)
+      fixedDates++
+    }
+  }
+
   revalidatePath('/')
-  return NextResponse.json({ ok: true, totalResults, totalHighlights, perRobot: summary, debug })
+  return NextResponse.json({ ok: true, totalResults, totalHighlights, fixedDates, perRobot: summary, debug })
 }
