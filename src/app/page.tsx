@@ -49,7 +49,9 @@ export default async function HomePage() {
 
   const pastEvents = events.filter(e => e.status === 'past')
   const currentEvents = events.filter(e => e.status === 'current')
-  const upcomingEvents = events.filter(e => e.status === 'upcoming')
+  const upcomingEvents = events
+    .filter(e => e.status === 'upcoming')
+    .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
 
   return (
     <div>
