@@ -52,6 +52,28 @@ export default async function RobotPage({ params }: { params: Promise<{ slug: st
               )}
             </div>
             {robot.description && <p className="text-gray-300 leading-relaxed">{robot.description}</p>}
+            {robot.stats?.nhrl_tournaments > 0 && (
+              <div className="mt-3 flex flex-wrap gap-3">
+                <div className="bg-[#1a1a1a] rounded-lg px-4 py-2 text-center">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">NHRL Record</p>
+                  <p className="font-black text-lg">
+                    <span className="text-green-400">{robot.stats.nhrl_wins}W</span>
+                    <span className="text-gray-600 mx-1">–</span>
+                    <span className="text-red-400">{robot.stats.nhrl_losses}L</span>
+                  </p>
+                </div>
+                <div className="bg-[#1a1a1a] rounded-lg px-4 py-2 text-center">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">NHRL Events</p>
+                  <p className="font-black text-lg text-orange-400">{robot.stats.nhrl_tournaments}</p>
+                </div>
+                {robot.stats.nhrl_win_rate > 0 && (
+                  <div className="bg-[#1a1a1a] rounded-lg px-4 py-2 text-center">
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Win Rate</p>
+                    <p className="font-black text-lg text-yellow-400">{Math.round(robot.stats.nhrl_win_rate * 100)}%</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -57,7 +57,11 @@ export default function AdminPage() {
         setResultsSummary(`Syncing... ${lines.length}/${slugs.length} robots done`)
         await new Promise(r => setTimeout(r, 1500))
       }
-      setResultsSummary(`✅ Done! ${totalResults} results, ${totalHighlights} highlights, ${totalFixed} event dates fixed`)
+      // Also sync NHRL data
+      setResultsSummary(`Syncing NHRL data...`)
+      const nhrlRes = await fetch('/api/cron/sync-nhrl', { headers: { authorization: `Bearer ${password}` } })
+      const nhrlData = await nhrlRes.json()
+      setResultsSummary(`✅ Done! ${totalResults} results, ${totalHighlights} highlights, ${totalFixed} dates fixed | NHRL: ${nhrlData.eventsAdded ?? 0} events added, ${nhrlData.resultsAdded ?? 0} results added`)
     } finally { setSyncing(false) }
   }
 
