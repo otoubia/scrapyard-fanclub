@@ -104,6 +104,14 @@ export const ROBOTS_SEED = [
     rce_url: 'https://www.robotcombatevents.com/groups/2570/resources/25978',
   },
   {
+    name: 'Dumb & Dumber',
+    slug: 'dumb-and-dumber',
+    weight_class: '12lb Hobbyweight',
+    weapon_type: 'Unknown',
+    description: '12lb hobbyweight competing at NHRL.',
+    rce_url: null,
+  },
+  {
     name: 'Salt & Pepper',
     slug: 'salt-and-pepper',
     weight_class: '1lb Plastic Antweight',

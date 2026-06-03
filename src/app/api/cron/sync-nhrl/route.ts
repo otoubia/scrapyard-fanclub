@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 
 const NHRL_BASE = 'https://brettzone.nhrl.io/brettZone/api.php'
 const NHRL_LOCATION = '165 Water St., Norwalk, CT 06854'
-const RELEVANT_WEIGHT_CLASSES = [3, 30]
+const RELEVANT_WEIGHT_CLASSES = [3, 12, 30]
 
 function checkAuth(req: NextRequest) {
   const secret = req.headers.get('authorization')
