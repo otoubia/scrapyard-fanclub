@@ -59,18 +59,66 @@ function bestDate(t: NHRLTournament): string | null {
   return dateFromTournamentId(t.tournamentID)
 }
 
+// Scrape upcoming events from nhrl.io/events page
+async function fetchUpcomingNHRLEvents(): Promise<Array<{title: string, date: string | null, external_id: string}>> {
+  try {
+    const res = await fetch('https://nhrl.io/events', { next: { revalidate: 0 } })
+    if (!res.ok) return []
+    const html = await res.text()
+    const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+
+    const upcoming: Array<{title: string, date: string | null, external_id: string}> = []
+    // Match event patterns: "Month Day: Title" or "Month (TBA): Title"
+    const eventRegex = /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(?:(\d+)[,:]?\s+)?(\d{4})[:\s]+"?([^"]+)"?/gi
+    let match
+    while ((match = eventRegex.exec(text)) !== null) {
+      const month = match[1], day = match[2], year = match[3], title = match[4].trim()
+      if (!title || title.length < 5) continue
+      const dateStr = day ? `${month} ${day}, ${year}` : `${month} 1, ${year}`
+      const parsed = new Date(dateStr)
+      const date = !isNaN(parsed.getTime()) ? parsed.toISOString() : null
+      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 40)
+      upcoming.push({ title, date, external_id: `nhrl-upcoming:${slug}` })
+    }
+    return upcoming
+  } catch {
+    return []
+  }
+}
+
 export async function GET(req: NextRequest) {
   if (!checkAuth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const supabase = await createServiceClient()
 
-  // 1. Fetch full tournament list
+  // 1. Fetch full tournament list (past events)
   const tourRes = await fetch(`${NHRL_BASE}/tournaments`, { next: { revalidate: 0 } })
   if (!tourRes.ok) return NextResponse.json({ error: 'Failed to fetch NHRL tournaments' }, { status: 500 })
   const tourData = await tourRes.json()
   const allTournaments: NHRLTournament[] = tourData.tournaments ?? []
 
-  // 2. Filter to relevant tournaments
+  // 2. Scrape upcoming events from nhrl.io/events
+  const upcomingFromWebsite = await fetchUpcomingNHRLEvents()
+  const now = new Date()
+  // Upsert upcoming events
+  for (const ev of upcomingFromWebsite) {
+    if (!ev.date || new Date(ev.date) <= now) continue
+    const { data: existing } = await supabase.from('events').select('id').eq('external_id', ev.external_id).single()
+    if (!existing) {
+      await supabase.from('events').insert({
+        title: ev.title, event_source: 'nhrl', external_id: ev.external_id,
+        status: 'upcoming', start_date: ev.date, location: NHRL_LOCATION,
+        updated_at: new Date().toISOString(),
+      })
+    } else {
+      await supabase.from('events').update({
+        title: ev.title, status: 'upcoming', start_date: ev.date,
+        updated_at: new Date().toISOString(),
+      }).eq('id', existing.id)
+    }
+  }
+
+  // 3. Filter past tournaments to relevant ones
   const relevant = allTournaments.filter(isRelevantTournament)
 
   // 3. Get NHRL robots from DB (those with nhrl_clean_name in stats)

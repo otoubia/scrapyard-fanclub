@@ -27,11 +27,12 @@ export default async function HomePage() {
       new Date(b.event?.start_date ?? 0).getTime() - new Date(a.event?.start_date ?? 0).getTime()
     )
     media = mediaRes.data ?? []
-    // Sort robots by number of events attended (most to least)
+    // Sort robots by number of events attended (most to least), then alphabetically
     robots = (robotsRes.data ?? []).sort((a: any, b: any) => {
-      const aCount = a.robot_results?.[0]?.count ?? 0
-      const bCount = b.robot_results?.[0]?.count ?? 0
-      return bCount - aCount
+      const aCount = parseInt(a.robot_results?.[0]?.count ?? 0)
+      const bCount = parseInt(b.robot_results?.[0]?.count ?? 0)
+      if (bCount !== aCount) return bCount - aCount
+      return a.name.localeCompare(b.name)
     })
     posts = postsRes.data ?? []
 

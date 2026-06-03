@@ -3,7 +3,7 @@ import { formatDateShort } from '@/lib/utils'
 
 const typeConfig: Record<string, { label: string; color: string; Icon: any }> = {
   podium: { label: 'Podium Finish', color: 'text-yellow-400', Icon: Trophy },
-  primetime: { label: 'Prime Time', color: 'text-purple-400', Icon: Star },
+  primetime: { label: '⚡ NHRL Prime Time', color: 'text-purple-400', Icon: Zap },
   knockout: { label: 'Knockout', color: 'text-orange-400', Icon: Zap },
   other: { label: 'Highlight', color: 'text-blue-400', Icon: Star },
 }
