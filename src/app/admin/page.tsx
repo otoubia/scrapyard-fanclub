@@ -9,6 +9,8 @@ export default function AdminPage() {
   const [posts, setPosts] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [syncingResults, setSyncingResults] = useState(false)
+  const [resultsSummary, setResultsSummary] = useState<string | null>(null)
 
   async function fetchPosts(secret: string) {
     setLoading(true)
@@ -36,6 +38,19 @@ export default function AdminPage() {
     } finally { setSyncing(false) }
   }
 
+  async function triggerRobotResultsSync() {
+    setSyncingResults(true)
+    setResultsSummary(null)
+    try {
+      const res = await fetch('/api/cron/sync-robot-results', { headers: { authorization: `Bearer ${password}` } })
+      const data = await res.json()
+      if (data.perRobot) {
+        const lines = Object.entries(data.perRobot).map(([name, count]) => `${name}: ${count} results`)
+        setResultsSummary(`Synced ${data.totalResults} results, ${data.totalHighlights} highlights\n${lines.join(', ')}`)
+      }
+    } finally { setSyncingResults(false) }
+  }
+
   if (!authed) {
     return (
       <div className="max-w-sm mx-auto px-4 py-24">
@@ -57,12 +72,23 @@ export default function AdminPage() {
     <div className="max-w-4xl mx-auto px-4 py-12">
       <div className="flex items-center justify-between mb-8">
         <h1 className="section-title mb-0">Admin Panel</h1>
-        <button onClick={triggerSync} disabled={syncing}
-          className="flex items-center gap-2 border border-orange-500 text-orange-500 hover:bg-orange-500/10 px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
-          <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
-          {syncing ? 'Syncing...' : 'Sync Events Now'}
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={triggerSync} disabled={syncing}
+            className="flex items-center gap-2 border border-orange-500 text-orange-500 hover:bg-orange-500/10 px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
+            <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+            {syncing ? 'Syncing...' : 'Sync Events'}
+          </button>
+          <button onClick={triggerRobotResultsSync} disabled={syncingResults}
+            className="flex items-center gap-2 border border-yellow-500 text-yellow-500 hover:bg-yellow-500/10 px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
+            <RefreshCw size={14} className={syncingResults ? 'animate-spin' : ''} />
+            {syncingResults ? 'Syncing...' : 'Sync Robot Results'}
+          </button>
+        </div>
       </div>
+
+      {resultsSummary && (
+        <div className="mb-8 card p-4 text-sm text-green-400 whitespace-pre-wrap">{resultsSummary}</div>
+      )}
 
       <section className="mb-10">
         <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
