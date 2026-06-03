@@ -1,4 +1,5 @@
-import { Trophy, Star, Zap } from 'lucide-react'
+import { Trophy, Star, Zap, Calendar, MapPin } from 'lucide-react'
+import { formatDateShort } from '@/lib/utils'
 
 const typeConfig: Record<string, { label: string; color: string; Icon: any }> = {
   podium: { label: 'Podium Finish', color: 'text-yellow-400', Icon: Trophy },
@@ -28,9 +29,14 @@ export default function HighlightsSection({ highlights }: { highlights: any[] })
                 </div>
                 <h3 className="font-bold text-lg">{h.title}</h3>
                 {h.description && <p className="text-sm text-gray-400">{h.description}</p>}
-                <div className="text-xs text-gray-500 flex flex-col gap-0.5">
+                <div className="text-xs text-gray-500 flex flex-col gap-1">
                   {h.robot?.name && <span>🤖 {h.robot.name}</span>}
-                  {h.event?.title && <span>📍 {h.event.title}</span>}
+                  {h.event?.start_date && !h.event.start_date.startsWith('2020') && (
+                    <span className="flex items-center gap-1"><Calendar size={11} /> {formatDateShort(h.event.start_date)}</span>
+                  )}
+                  {h.event?.location && (
+                    <span className="flex items-center gap-1"><MapPin size={11} /> {h.event.location}</span>
+                  )}
                 </div>
                 {h.media_url && (
                   <div className="mt-2 rounded-lg overflow-hidden aspect-video bg-[#1a1a1a]">

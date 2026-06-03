@@ -103,4 +103,12 @@ export const ROBOTS_SEED = [
     description: 'Antweight spinner competing in the GSCRL circuit.',
     rce_url: 'https://www.robotcombatevents.com/groups/2570/resources/25978',
   },
+  {
+    name: 'Salt & Pepper',
+    slug: 'salt-and-pepper',
+    weight_class: '1lb Plastic Antweight',
+    weapon_type: 'Spinner',
+    description: '2x2 vertical multi spinner.',
+    rce_url: 'https://www.robotcombatevents.com/groups/2570/resources/23820',
+  },
 ]

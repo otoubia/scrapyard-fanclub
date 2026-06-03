@@ -144,8 +144,22 @@ export async function GET(req: NextRequest) {
             .in('event_id', existingEventIds)
         : { data: [] }
 
-      // Map event_id → result
       const existingResultMap = new Map(existingResults?.map(r => [r.event_id, r]) ?? [])
+
+      // Determine which events need a fresh page fetch, then do them ALL in parallel
+      const rowsNeedingFetch = allRows.filter(row => {
+        const existingEvent = existingEventMap.get(`rce-event:${row.rceEventId}`)
+        const existingResult = existingEvent ? existingResultMap.get(existingEvent.id) : null
+        const alreadySettled = existingEvent?.start_date &&
+          !existingEvent.start_date.startsWith('2020') &&
+          existingResult?.placement != null
+        return !alreadySettled
+      })
+
+      const fetchedDetails = await Promise.all(
+        rowsNeedingFetch.map(row => fetchEventDetails(row.rceEventId))
+      )
+      const fetchedMap = new Map(rowsNeedingFetch.map((row, i) => [row.rceEventId, fetchedDetails[i]]))
 
       for (const row of allRows) {
         const externalId = `rce-event:${row.rceEventId}`
@@ -153,25 +167,21 @@ export async function GET(req: NextRequest) {
         const existingEvent = existingEventMap.get(externalId)
         const existingResult = existingEvent ? existingResultMap.get(existingEvent.id) : null
 
-        // Skip fetching event page if:
-        // - event already exists in DB with a real date, AND
-        // - robot already has a result with a placement (i.e. not still pending)
         const alreadySettled = existingEvent?.start_date &&
           !existingEvent.start_date.startsWith('2020') &&
-          existingResult?.placement !== null &&
-          existingResult?.placement !== undefined
+          existingResult?.placement != null
 
         let startDate = existingEvent?.start_date ?? null
         let location = existingEvent?.location ?? null
 
         if (!alreadySettled) {
-          // Re-fetch the event page — either new event, or result still pending
-          const details = await fetchEventDetails(row.rceEventId)
-          if (details.startDate) startDate = details.startDate
-          if (details.location) location = details.location
+          const details = fetchedMap.get(row.rceEventId)
+          if (details?.startDate) startDate = details.startDate
+          if (details?.location) location = details.location
         }
 
-        const status = startDate && new Date(startDate) > new Date() ? 'upcoming' : 'past'
+        // Always derive status from actual date
+        const status = startDate && !startDate.startsWith('2020') && new Date(startDate) > new Date() ? 'upcoming' : 'past'
 
         // Upsert event
         let eventId: string | null = existingEvent?.id ?? null
