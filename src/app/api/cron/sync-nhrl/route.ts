@@ -349,52 +349,26 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 6. Add upcoming events for NHRL bots
-  // For Open events: all bots compete
-  // For Pro Tour events: only bots that have competed in a Pro Tour this season qualify
-  const currentYear = now.getFullYear()
-
-  // Determine which bots have competed in Pro Tour events this season
-  const proTourBotIds = new Set<string>()
-  for (const robot of nhrlRobots) {
-    const fights = botFightsMap[robot.id] ?? []
-    const hasProTour = fights.some(f =>
-      /pro/i.test(f.tournamentId) && f.tournamentId.includes(String(currentYear).slice(2))
-    )
-    if (hasProTour) proTourBotIds.add(robot.id)
-  }
-
-  for (const ev of upcomingFromWebsite) {
-    if (!ev.date || new Date(ev.date) <= now) continue
-    const isProTour = /pro tour/i.test(ev.title)
-    const { data: eventRow } = await supabase.from('events').select('id').eq('external_id', ev.external_id).single()
-    if (!eventRow) continue
-    for (const robot of nhrlRobots) {
-      // For Pro Tour: only add bots that competed in a Pro Tour this season
-      if (isProTour && !proTourBotIds.has(robot.id)) continue
-      const { data: existing } = await supabase.from('robot_results').select('id')
-        .eq('robot_id', robot.id).eq('event_id', eventRow.id).single()
-      if (!existing) {
-        await supabase.from('robot_results').insert({
-          robot_id: robot.id, event_id: eventRow.id,
-          wins: 0, losses: 0, placement: null, is_highlight: false, notes: 'NHRL upcoming',
-        })
-      }
-    }
-  }
+  // Note: we do NOT auto-assign bots to upcoming NHRL events
+  // because we don't have reliable registration data.
+  // Bots will appear on past events only (from fightsByBot).
+  // Upcoming NHRL events still appear in the events calendar.
 
   // 8. Update each NHRL bot's stats and try to fetch image from BrettZone
   const { data: freshRobots } = await supabase.from('robots').select('id, slug, stats, image_url').in('id', nhrlRobots.map(r => r.id))
   for (const robot of freshRobots ?? []) {
-    const botStats = botStatsMap[robot.id]
-    if (!botStats) continue
     const cleanName = robot.stats?.nhrl_clean_name
+    // Count actual tournaments from fight history (reliable)
+    const fights = botFightsMap[robot.id] ?? []
+    const actualTournaments = new Set(fights.map(f => f.tournamentId)).size
+    const actualWins = fights.filter(f => f.won).length
+    const actualLosses = fights.filter(f => !f.won).length
     const updatedStats = {
       ...robot.stats,
-      nhrl_wins: botStats.totalWins,
-      nhrl_losses: botStats.totalLosses,
-      nhrl_tournaments: botStats.totalTournaments,
-      nhrl_win_rate: botStats.winRate,
+      nhrl_wins: actualWins,
+      nhrl_losses: actualLosses,
+      nhrl_tournaments: actualTournaments,
+      nhrl_win_rate: actualTournaments > 0 ? actualWins / (actualWins + actualLosses) : 0,
     }
 
     // Try fetching bot image from BrettZone if we don't have one
