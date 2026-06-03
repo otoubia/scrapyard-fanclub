@@ -19,7 +19,7 @@ export default async function RobotPage({ params }: { params: Promise<{ slug: st
 
     if (robot) {
       const [resultsRes, mediaRes] = await Promise.all([
-        supabase.from('robot_results').select('*, event:events(*)').eq('robot_id', robot.id).order('created_at', { ascending: false }),
+        supabase.from('robot_results').select('*, event:events(*)').eq('robot_id', robot.id).order('created_at', { ascending: false }).limit(100),
         supabase.from('media').select('*').eq('robot_id', robot.id).eq('approved', true).order('created_at', { ascending: false }),
       ])
       results = resultsRes.data ?? []
@@ -60,24 +60,35 @@ export default async function RobotPage({ params }: { params: Promise<{ slug: st
         <section className="mb-10">
           <h2 className="section-title">Event Results</h2>
           <div className="flex flex-col gap-3">
-            {results.map((r: any) => (
+            {[...results]
+              .sort((a, b) => new Date(b.event?.start_date ?? 0).getTime() - new Date(a.event?.start_date ?? 0).getTime())
+              .map((r: any) => (
               <div key={r.id} className="card p-4 flex items-center justify-between">
                 <div>
                   <p className="font-semibold">{r.event?.title ?? 'Unknown event'}</p>
-                  {r.event?.start_date && (
-                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                  <div className="flex flex-wrap gap-x-3 mt-0.5">
+                  {r.event?.start_date && !r.event.start_date.startsWith('2020') && (
+                    <p className="text-xs text-gray-500 flex items-center gap-1">
                       <Calendar size={11} /> {formatDateShort(r.event.start_date)}
                     </p>
                   )}
+                  {r.event?.location && (
+                    <p className="text-xs text-gray-500 truncate max-w-xs">{r.event.location}</p>
+                  )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-4 text-sm">
-                  <span className="text-green-400 font-bold">{r.wins}W</span>
-                  <span className="text-red-400 font-bold">{r.losses}L</span>
+                  {(r.wins > 0 || r.losses > 0) && <>
+                    <span className="text-green-400 font-bold">{r.wins}W</span>
+                    <span className="text-red-400 font-bold">{r.losses}L</span>
+                  </>}
                   {r.placement && (
-                    <span className="flex items-center gap-1 text-yellow-400 font-bold">
-                      <Trophy size={13} /> {r.placement}
+                    <span className={`flex items-center gap-1 font-bold ${['1st Place','2nd Place','3rd Place'].includes(r.placement) ? 'text-yellow-400' : 'text-gray-400'}`}>
+                      {['1st Place','2nd Place','3rd Place'].includes(r.placement) && <Trophy size={13} />}
+                      {r.placement}
                     </span>
                   )}
+                  {!r.placement && <span className="text-gray-600 text-xs">Pending</span>}
                 </div>
               </div>
             ))}
