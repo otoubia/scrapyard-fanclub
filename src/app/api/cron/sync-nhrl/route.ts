@@ -96,7 +96,6 @@ function parseFightsByBot(html: string, botCleanName: string): BotFight[] {
 
     // cols: 0=matchId, 1=tournament, 2=round, 3=cage, 4=redBot, 5=blueBot, 6=winner, 7=winType
     const redBot = cells[4]?.toLowerCase().replace(/\s+/g, '')
-    const blueBot = cells[5]?.toLowerCase().replace(/\s+/g, '')
     const clean = botCleanName.toLowerCase()
     const botIsRed = redBot === clean || (cells[4]?.toLowerCase().includes(botCleanName.toLowerCase()) ?? false)
 
@@ -353,7 +352,6 @@ export async function GET(req: NextRequest) {
   // 6. Add upcoming events for NHRL bots
   // For Open events: all bots compete
   // For Pro Tour events: only bots that have competed in a Pro Tour this season qualify
-  const now = new Date()
   const currentYear = now.getFullYear()
 
   // Determine which bots have competed in Pro Tour events this season
