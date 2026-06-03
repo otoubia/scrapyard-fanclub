@@ -43,6 +43,45 @@ function parseImageUrl(html: string): string | null {
   return m ? m[0] : null
 }
 
+// Parse date and location from an event page
+function parseEventPage(html: string): { startDate: string | null, location: string | null } {
+  // Match: <p class="info-row"><strong>Location:</strong> ...</p>
+  const locMatch = html.match(/Location:<\/strong>\s*([^<]+)/)
+  const location = locMatch ? locMatch[1].trim() : null
+
+  // Match: <p class="info-row"><strong>Date:</strong> Saturday, April 25, 2026 ...</p>
+  // or multi-day: "April 25, 2026 – April 26, 2026"
+  const dateMatch = html.match(/Date:<\/strong>\s*([^<]+)/)
+  let startDate: string | null = null
+  if (dateMatch) {
+    const raw = dateMatch[1].trim()
+    // Take the first date (before any em-dash for multi-day events)
+    const firstDate = raw.split(/[–-]/)[0].trim()
+    // Remove day-of-week prefix if present: "Saturday, April 25, 2026" → "April 25, 2026"
+    const cleaned = firstDate.replace(/^[A-Za-z]+,\s*/, '')
+    const parsed = new Date(cleaned)
+    if (!isNaN(parsed.getTime())) startDate = parsed.toISOString()
+  }
+
+  return { startDate, location }
+}
+
+// In-memory cache of event page data keyed by RCE event ID (scoped to one invocation)
+const eventPageCache: Record<string, { startDate: string | null, location: string | null }> = {}
+
+async function fetchEventDetails(rceEventId: string) {
+  if (eventPageCache[rceEventId]) return eventPageCache[rceEventId]
+  try {
+    const res = await fetch(`https://www.robotcombatevents.com/events/${rceEventId}`, { next: { revalidate: 0 } })
+    const html = res.ok ? await res.text() : ''
+    const details = parseEventPage(html)
+    eventPageCache[rceEventId] = details
+    return details
+  } catch {
+    return { startDate: null, location: null }
+  }
+}
+
 function ordinal(n: number): string {
   if (n === 1) return '1st Place'
   if (n === 2) return '2nd Place'
@@ -111,6 +150,10 @@ export async function GET(req: NextRequest) {
         const placement = row.place > 0 ? ordinal(row.place) : null
         const externalId = `rce-event:${row.rceEventId}`
 
+        // Fetch real date and location from the event page
+        const { startDate, location } = await fetchEventDetails(row.rceEventId)
+        const status = startDate && new Date(startDate) > new Date() ? 'upcoming' : 'past'
+
         // Upsert event
         let eventId: string | null = null
         const { data: existingEvent } = await supabase
@@ -122,7 +165,13 @@ export async function GET(req: NextRequest) {
 
         if (existingEvent) {
           eventId = existingEvent.id
-          await supabase.from('events').update({ title: row.eventName, updated_at: new Date().toISOString() }).eq('id', eventId)
+          await supabase.from('events').update({
+            title: row.eventName,
+            start_date: startDate ?? undefined,
+            location: location ?? undefined,
+            status,
+            updated_at: new Date().toISOString()
+          }).eq('id', eventId)
         } else {
           const { data: newEvent } = await supabase
             .from('events')
@@ -130,8 +179,9 @@ export async function GET(req: NextRequest) {
               title: row.eventName,
               event_source: 'rce_robot',
               external_id: externalId,
-              status: row.place > 0 ? 'past' : 'upcoming',
-              start_date: new Date('2020-01-01').toISOString(),
+              status,
+              start_date: startDate ?? new Date('2020-01-01').toISOString(),
+              location,
               updated_at: new Date().toISOString(),
             })
             .select('id')
