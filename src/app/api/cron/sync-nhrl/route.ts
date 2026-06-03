@@ -126,22 +126,41 @@ async function fetchUpcomingNHRLEvents(): Promise<Array<{title: string, date: st
     const res = await fetch('https://nhrl.io/events', { next: { revalidate: 0 } })
     if (!res.ok) return []
     const html = await res.text()
-    const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+    const text = html.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ')
 
     const upcoming: Array<{title: string, date: string | null, external_id: string}> = []
-    // Match event patterns: "Month Day: Title" or "Month (TBA): Title"
-    const eventRegex = /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(?:(\d+)[,:]?\s+)?(\d{4})[:\s]+"?([^"]+)"?/gi
-    let match
-    while ((match = eventRegex.exec(text)) !== null) {
-      const month = match[1], day = match[2], year = match[3], title = match[4].trim()
-      if (!title || title.length < 5) continue
-      const dateStr = day ? `${month} ${day}, ${year}` : `${month} 1, ${year}`
+    const now = new Date()
+    const currentYear = now.getFullYear()
+
+    // Match patterns like "June 2026 Open" or "2026 NHRL..." near a date "Sat Jun 06" or "Jun 06"
+    // Strategy: find date patterns first, then grab nearby event names
+
+    // Pattern 1: "Mon Mmm DD / HH:MM" e.g. "Sat Jun 06 / 10:00"
+    const dateRegex = /(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})/gi
+    let m
+    while ((m = dateRegex.exec(text)) !== null) {
+      const month = m[1], day = m[2]
+      const dateStr = `${month} ${day}, ${currentYear}`
       const parsed = new Date(dateStr)
-      const date = !isNaN(parsed.getTime()) ? parsed.toISOString() : null
-      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 40)
-      upcoming.push({ title, date, external_id: `nhrl-upcoming:${slug}` })
+      if (isNaN(parsed.getTime()) || parsed <= now) continue
+
+      // Grab the surrounding ~200 chars to find the event name
+      const surrounding = text.substring(Math.max(0, m.index - 200), m.index + 50)
+      // Look for event title patterns nearby: "XXXX Open", "Pro Tour", "Championship", etc.
+      const titleMatch = surrounding.match(/(\d{4}\s+NHRL[^/\n]{5,60}|NHRL[^/\n]{5,60}|\w+ \d{4} (?:Open|Pro Tour|Championship)[^/\n]{0,40})/i)
+      const title = titleMatch ? titleMatch[1].trim().replace(/\s+/g, ' ') : `NHRL ${month} ${currentYear}`
+
+      const slug = `${currentYear}-${month.toLowerCase()}-${day.padStart(2,'0')}`
+      upcoming.push({ title, date: parsed.toISOString(), external_id: `nhrl-upcoming:${slug}` })
     }
-    return upcoming
+
+    // Deduplicate by external_id
+    const seen = new Set<string>()
+    return upcoming.filter(e => {
+      if (seen.has(e.external_id)) return false
+      seen.add(e.external_id)
+      return true
+    })
   } catch {
     return []
   }
