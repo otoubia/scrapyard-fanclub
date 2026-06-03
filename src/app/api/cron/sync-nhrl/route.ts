@@ -3,8 +3,69 @@ import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/server'
 
 const NHRL_BASE = 'https://brettzone.nhrl.io/brettZone/api.php'
+const NHRL_BRACKET_BASE = 'https://brettzone.nhrl.io/brettZone/bracketView.php'
+const NHRL_BOT_PIC_BASE = 'https://brettzone.nhrl.io/brettZone/getBotPic.php'
 const NHRL_LOCATION = '165 Water St., Norwalk, CT 06854'
 const RELEVANT_WEIGHT_CLASSES = [3, 12, 30]
+
+interface BracketRound {
+  allPlayers: string[]
+  winners: string[]
+}
+
+// Parse BrettZone bracket HTML into rounds with players and winners
+function parseBracketHtml(html: string): BracketRound[] {
+  const rounds: BracketRound[] = []
+  // Split into round blocks
+  const roundBlocks = html.split(/<div[^>]+class="[^"]*\bround\b[^"]*"/)
+  for (const block of roundBlocks.slice(1)) { // skip first (before any round)
+    // Get all player names
+    const allPlayers: string[] = []
+    const playerNameRegex = /<span[^>]+class="[^"]*player-name[^"]*"[^>]*>([\s\S]*?)<\/span>/gi
+    let m
+    while ((m = playerNameRegex.exec(block)) !== null) {
+      const name = m[1].replace(/<[^>]+>/g, '').trim()
+      if (name) allPlayers.push(name)
+    }
+    // Get winners — player-name inside a div with class "player winner"
+    const winners: string[] = []
+    const winnerBlockRegex = /<div[^>]+class="[^"]*player winner[^"]*"[^>]*>([\s\S]*?)<\/div>/gi
+    while ((m = winnerBlockRegex.exec(block)) !== null) {
+      const nameMatch = m[1].match(/<span[^>]+class="[^"]*player-name[^"]*"[^>]*>([\s\S]*?)<\/span>/i)
+      if (nameMatch) {
+        const name = nameMatch[1].replace(/<[^>]+>/g, '').trim()
+        if (name) winners.push(name)
+      }
+    }
+    if (allPlayers.length > 0) rounds.push({ allPlayers, winners })
+  }
+  return rounds
+}
+
+// Derive placement from bracket rounds for a given bot name (case-insensitive)
+function getPlacementFromBracket(rounds: BracketRound[], botName: string): { placement: string, isPrimetime: boolean } | null {
+  const lower = botName.toLowerCase()
+  const inRound = (r: BracketRound) => r.allPlayers.some(p => p.toLowerCase() === lower)
+  const isWinner = (r: BracketRound) => r.winners.some(p => p.toLowerCase() === lower)
+
+  // Bot must appear in QF (round 0) to have made Prime Time
+  if (!rounds[0] || !inRound(rounds[0])) return null
+
+  const numRounds = rounds.length
+  const finalRound = rounds[numRounds - 1]
+  const sfRound = rounds[numRounds - 2]
+  const qfRound = rounds[0]
+
+  // Champion: won every round including the final
+  if (finalRound && isWinner(finalRound)) return { placement: '1st Place', isPrimetime: true }
+  // Runner-up: in final but lost
+  if (finalRound && inRound(finalRound) && !isWinner(finalRound)) return { placement: '2nd Place', isPrimetime: true }
+  // SF loser: in SF but not final
+  if (sfRound && sfRound !== qfRound && inRound(sfRound) && !isWinner(sfRound))
+    return { placement: '3rd-4th Place', isPrimetime: true }
+  // QF loser: in QF but not SF
+  return { placement: '5th-8th Place (Prime Time)', isPrimetime: true }
+}
 
 function checkAuth(req: NextRequest) {
   const secret = req.headers.get('authorization')
@@ -182,21 +243,31 @@ export async function GET(req: NextRequest) {
 
     if (!eventId) continue
 
-    // 6. Fetch tournament stats to check if our bots competed
-    // Small delay to be nice to the API
+    // 6. Fetch tournament stats + bracket in parallel
     await new Promise(r => setTimeout(r, 200))
     let tournamentPlayers: string[] = []
+    let bracketRounds: BracketRound[] = []
     try {
-      const tRes = await fetch(`${NHRL_BASE}/stats/tournament/${tournament.tournamentID}`, { next: { revalidate: 0 } })
+      const [tRes, bRes] = await Promise.all([
+        fetch(`${NHRL_BASE}/stats/tournament/${tournament.tournamentID}`, { next: { revalidate: 0 } }),
+        fetch(`${NHRL_BRACKET_BASE}?tournamentID=${tournament.tournamentID}`, { next: { revalidate: 0 } }),
+      ])
       if (tRes.ok) {
         const tData = await tRes.json()
         const ts = tData.tournamentStats
-        // Collect bot names mentioned in this tournament
         const names = [
           ts?.longestFight?.player1, ts?.longestFight?.player2,
           ts?.shortestFight?.player1, ts?.shortestFight?.player2,
         ].filter(Boolean).map((n: string) => n.toLowerCase().replace(/\s+/g, ''))
         tournamentPlayers = names
+      }
+      if (bRes.ok) {
+        const bHtml = await bRes.text()
+        bracketRounds = parseBracketHtml(bHtml)
+        // All players in the bracket definitely competed
+        bracketRounds[0]?.allPlayers.forEach(p =>
+          tournamentPlayers.push(p.toLowerCase().replace(/\s+/g, ''))
+        )
       }
     } catch {}
 
@@ -230,25 +301,56 @@ export async function GET(req: NextRequest) {
         .eq('event_id', eventId)
         .single()
 
-      if (!existingResult) {
-        await supabase.from('robot_results').insert({
-          robot_id: robot.id,
-          event_id: eventId,
-          wins: 0,
-          losses: 0,
-          placement: null,
-          is_highlight: false,
-          notes: 'NHRL event',
-        })
+      // Determine placement from bracket data
+      const bracketPlacement = getPlacementFromBracket(bracketRounds, cleanName) ??
+        getPlacementFromBracket(bracketRounds, botStats?.botName ?? '')
+
+      const resultData = {
+        wins: 0,
+        losses: 0,
+        placement: bracketPlacement?.placement ?? null,
+        is_highlight: bracketPlacement?.isPrimetime ?? false,
+        notes: 'NHRL event',
+      }
+
+      if (existingResult) {
+        // Only update if we have new placement data
+        if (bracketPlacement) {
+          await supabase.from('robot_results').update(resultData).eq('id', existingResult.id)
+        }
+      } else {
+        await supabase.from('robot_results').insert({ robot_id: robot.id, event_id: eventId, ...resultData })
         resultsAdded++
+      }
+
+      // Create Prime Time highlight
+      if (bracketPlacement?.isPrimetime) {
+        const { data: existingHighlight } = await supabase
+          .from('highlights')
+          .select('id')
+          .eq('robot_id', robot.id)
+          .eq('event_id', eventId)
+          .single()
+        if (!existingHighlight) {
+          const isPodium = ['1st Place', '2nd Place', '3rd-4th Place'].includes(bracketPlacement.placement)
+          await supabase.from('highlights').insert({
+            title: `${robot.name} — ${bracketPlacement.placement} at ${tournament.tournamentName}`,
+            description: `Reached Prime Time at NHRL`,
+            robot_id: robot.id,
+            event_id: eventId,
+            type: isPodium ? 'podium' : 'primetime',
+          })
+        }
       }
     }
   }
 
-  // 8. Update each NHRL bot's stats with career totals
-  for (const robot of nhrlRobots) {
+  // 8. Update each NHRL bot's stats and try to fetch image from BrettZone
+  const { data: freshRobots } = await supabase.from('robots').select('id, slug, stats, image_url').in('id', nhrlRobots.map(r => r.id))
+  for (const robot of freshRobots ?? []) {
     const botStats = botStatsMap[robot.id]
     if (!botStats) continue
+    const cleanName = robot.stats?.nhrl_clean_name
     const updatedStats = {
       ...robot.stats,
       nhrl_wins: botStats.totalWins,
@@ -256,7 +358,22 @@ export async function GET(req: NextRequest) {
       nhrl_tournaments: botStats.totalTournaments,
       nhrl_win_rate: botStats.winRate,
     }
-    await supabase.from('robots').update({ stats: updatedStats }).eq('id', robot.id)
+
+    // Try fetching bot image from BrettZone if we don't have one
+    let imageUrl = robot.image_url
+    if (!imageUrl && cleanName) {
+      try {
+        const imgRes = await fetch(`${NHRL_BOT_PIC_BASE}?bot=${cleanName}`, { next: { revalidate: 0 } })
+        if (imgRes.ok && imgRes.headers.get('content-type')?.startsWith('image/')) {
+          imageUrl = `${NHRL_BOT_PIC_BASE}?bot=${cleanName}`
+        }
+      } catch {}
+    }
+
+    await supabase.from('robots').update({
+      stats: updatedStats,
+      ...(imageUrl && imageUrl !== robot.image_url ? { image_url: imageUrl } : {})
+    }).eq('id', robot.id)
     revalidatePath(`/robots/${robot.slug}`)
   }
 
