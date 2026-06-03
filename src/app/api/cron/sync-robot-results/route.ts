@@ -104,14 +104,12 @@ export async function GET(req: NextRequest) {
         )
       )
 
-      // Only fetch image if we don't already have one
-      if (!robot.image_url) {
-        for (const html of pages) {
-          const imageUrl = parseImageUrl(html)
-          if (imageUrl) {
-            await supabase.from('robots').update({ image_url: imageUrl }).eq('id', robot.id)
-            break
-          }
+      // Always check for updated image
+      for (const html of pages) {
+        const imageUrl = parseImageUrl(html)
+        if (imageUrl && imageUrl !== robot.image_url) {
+          await supabase.from('robots').update({ image_url: imageUrl }).eq('id', robot.id)
+          break
         }
       }
 
