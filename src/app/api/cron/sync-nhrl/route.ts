@@ -6,7 +6,7 @@ const NHRL_BASE = 'https://brettzone.nhrl.io/brettZone/api.php'
 const NHRL_BRACKET_BASE = 'https://brettzone.nhrl.io/brettZone/bracketView.php'
 const NHRL_BOT_PIC_BASE = 'https://brettzone.nhrl.io/brettZone/getBotPic.php'
 const NHRL_LOCATION = '165 Water St., Norwalk, CT 06854'
-const RELEVANT_WEIGHT_CLASSES = [3, 12, 30]
+
 
 interface BracketRound {
   allPlayers: string[]
@@ -94,16 +94,16 @@ function parseFightsByBot(html: string, botCleanName: string): BotFight[] {
     const tournamentId = hrefMatch[1]
     const tournamentName = cells[1]
 
-    // Determine if bot was red or blue
-    const redBot = cells[3]?.toLowerCase().replace(/\s+/g, '')
-    const blueBot = cells[4]?.toLowerCase().replace(/\s+/g, '')
+    // cols: 0=matchId, 1=tournament, 2=round, 3=cage, 4=redBot, 5=blueBot, 6=winner, 7=winType
+    const redBot = cells[4]?.toLowerCase().replace(/\s+/g, '')
+    const blueBot = cells[5]?.toLowerCase().replace(/\s+/g, '')
     const clean = botCleanName.toLowerCase()
-    const botIsRed = redBot === clean || cells[3]?.toLowerCase().includes(botCleanName.toLowerCase())
+    const botIsRed = redBot === clean || (cells[4]?.toLowerCase().includes(botCleanName.toLowerCase()) ?? false)
 
     // Determine winner
-    const winner = cells[5]?.toLowerCase() // 'red' or 'blue'
+    const winner = cells[6]?.toLowerCase() // 'red' or 'blue'
     const won = botIsRed ? winner === 'red' : winner === 'blue'
-    const winType = cells[6] ?? ''
+    const winType = cells[7] ?? ''
 
     if (tournamentId && (winner === 'red' || winner === 'blue')) {
       fights.push({ tournamentId, tournamentName, botIsRed, won, winType })
@@ -146,13 +146,6 @@ interface NHRLTournament {
   numPlayers: number
 }
 
-function isRelevantTournament(t: NHRLTournament): boolean {
-  if (t.isTest || t.isFreestyle) return false
-  if (!RELEVANT_WEIGHT_CLASSES.includes(t.WeightClass)) return false
-  // Filter to properly named tournaments (not internal/practice)
-  if (!t.tournamentName.match(/^NHRL\s+\w+\s+20\d{2}/i)) return false
-  return true
-}
 
 function bestDate(t: NHRLTournament): string | null {
   const candidates = [t.scheduledStartTime, t.startTime, t.endTime]
