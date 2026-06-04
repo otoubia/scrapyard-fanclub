@@ -19,7 +19,7 @@ export default function AdminPage() {
   const [pendingMedia, setPendingMedia] = useState<any[]>([])
   const [approvedMedia, setApprovedMedia] = useState<any[]>([])
   const [mediaLoading, setMediaLoading] = useState(false)
-  const [editingMedia, setEditingMedia] = useState<Record<string, { title: string; caption: string }>>({})
+  const [editingMedia, setEditingMedia] = useState<Record<string, { title: string; caption: string; robot_ids: string[]; event_id: string }>>({})
 
   async function fetchPosts(secret: string) {
     setLoading(true)
@@ -60,7 +60,13 @@ export default function AdminPage() {
     await fetch('/api/admin/media', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', authorization: `Bearer ${password}` },
-      body: JSON.stringify({ id, approved, title: edits?.title, caption: edits?.caption }),
+      body: JSON.stringify({
+        id, approved,
+        title: edits?.title,
+        caption: edits?.caption,
+        robot_ids: edits?.robot_ids,
+        event_id: edits?.event_id,
+      }),
     })
     fetchPendingMedia(password)
   }
@@ -75,7 +81,15 @@ export default function AdminPage() {
   }
 
   function startEdit(item: any) {
-    setEditingMedia(prev => ({ ...prev, [item.id]: { title: item.title ?? '', caption: item.caption ?? '' } }))
+    setEditingMedia(prev => ({
+      ...prev,
+      [item.id]: {
+        title: item.title ?? '',
+        caption: item.caption ?? '',
+        robot_ids: item.media_robot_tags?.map((t: any) => t.robot?.id).filter(Boolean) ?? [],
+        event_id: item.event?.id ?? '',
+      }
+    }))
   }
 
   function stopEdit(id: string) {
@@ -288,6 +302,41 @@ export default function AdminPage() {
                       <textarea value={editing.caption} onChange={e => setEditingMedia(p => ({ ...p, [item.id]: { ...p[item.id], caption: e.target.value } }))}
                         className="w-full bg-[#111] border border-[#333] rounded px-2 py-1 text-xs focus:outline-none focus:border-orange-500 resize-none"
                         rows={2} placeholder="Caption" />
+                      {/* Bot tags */}
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Bots</p>
+                        <div className="flex flex-wrap gap-1">
+                          {robots.map((r: any) => {
+                            const selected = editing.robot_ids.includes(r.id)
+                            return (
+                              <button key={r.id} type="button"
+                                onClick={() => setEditingMedia(p => ({
+                                  ...p, [item.id]: {
+                                    ...p[item.id],
+                                    robot_ids: selected
+                                      ? p[item.id].robot_ids.filter((rid: string) => rid !== r.id)
+                                      : [...p[item.id].robot_ids, r.id]
+                                  }
+                                }))}
+                                className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${selected ? 'bg-orange-500 border-orange-500 text-white' : 'border-[#333] text-gray-500 hover:border-orange-500'}`}>
+                                {r.name}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      {/* Event tag */}
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Event</p>
+                        <select value={editing.event_id}
+                          onChange={e => setEditingMedia(p => ({ ...p, [item.id]: { ...p[item.id], event_id: e.target.value } }))}
+                          className="w-full bg-[#111] border border-[#333] rounded px-2 py-1 text-xs focus:outline-none focus:border-orange-500">
+                          <option value="">No event</option>
+                          {regData?.events?.map((e: any) => (
+                            <option key={e.id} value={e.id}>{e.title}</option>
+                          ))}
+                        </select>
+                      </div>
                       <button onClick={() => stopEdit(item.id)} className="text-xs text-gray-500 hover:text-gray-300 text-left">Cancel</button>
                     </div>
                   ) : (

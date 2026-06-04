@@ -26,12 +26,25 @@ export async function GET(req: NextRequest) {
 // Approve or update a media item
 export async function POST(req: NextRequest) {
   if (!checkAuth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { id, approved, title, caption } = await req.json()
+  const { id, approved, title, caption, robot_ids, event_id } = await req.json()
   const supabase = await createServiceClient()
+
   const updates: Record<string, unknown> = { approved }
-  if (title !== undefined) updates.title = title
-  if (caption !== undefined) updates.caption = caption
+  if (title !== undefined) updates.title = title || null
+  if (caption !== undefined) updates.caption = caption || null
+  if (event_id !== undefined) updates.event_id = event_id || null
   await supabase.from('media').update(updates).eq('id', id)
+
+  // Update robot tags if provided
+  if (robot_ids !== undefined) {
+    await supabase.from('media_robot_tags').delete().eq('media_id', id)
+    if (robot_ids.length > 0) {
+      await supabase.from('media_robot_tags').insert(
+        robot_ids.map((rid: string) => ({ media_id: id, robot_id: rid }))
+      )
+    }
+  }
+
   revalidatePath('/')
   return NextResponse.json({ ok: true })
 }
