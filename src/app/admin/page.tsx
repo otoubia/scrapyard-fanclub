@@ -385,21 +385,72 @@ export default function AdminPage() {
           <div className="flex flex-col gap-3">
             {approvedMedia.map((item: any) => {
               const bots = item.media_robot_tags?.map((t: any) => t.robot?.name).filter(Boolean) ?? []
+              const editing = editingMedia[item.id]
               return (
-                <div key={item.id} className="card p-3 flex items-center gap-3">
-                  <div className="w-16 h-12 bg-[#1a1a1a] rounded overflow-hidden shrink-0">
-                    {item.type === 'photo' && <img src={item.url} alt="" className="w-full h-full object-cover" />}
+                <div key={item.id} className="card p-4 flex gap-4">
+                  <div className="w-24 h-18 bg-[#1a1a1a] rounded overflow-hidden shrink-0 flex items-center justify-center" style={{minHeight:'4.5rem'}}>
+                    {item.type === 'photo'
+                      ? <img src={item.url} alt="" className="w-full h-full object-cover" />
+                      : <Video size={20} className="text-gray-600" />
+                    }
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{item.title || item.url}</p>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {bots.map((b: string) => <span key={b} className="text-xs bg-orange-500/10 text-orange-400 px-1.5 py-0.5 rounded-full">{b}</span>)}
-                    </div>
+                    {editing ? (
+                      <div className="flex flex-col gap-2">
+                        <input value={editing.title} onChange={e => setEditingMedia(p => ({ ...p, [item.id]: { ...p[item.id], title: e.target.value } }))}
+                          className="w-full bg-[#111] border border-[#333] rounded px-2 py-1 text-xs focus:outline-none focus:border-orange-500" placeholder="Title" />
+                        <textarea value={editing.caption} onChange={e => setEditingMedia(p => ({ ...p, [item.id]: { ...p[item.id], caption: e.target.value } }))}
+                          className="w-full bg-[#111] border border-[#333] rounded px-2 py-1 text-xs focus:outline-none focus:border-orange-500 resize-none" rows={2} placeholder="Caption" />
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Bots</p>
+                          <div className="flex flex-wrap gap-1">
+                            {robots.map((r: any) => {
+                              const selected = editing.robot_ids.includes(r.id)
+                              return (
+                                <button key={r.id} type="button"
+                                  onClick={() => setEditingMedia(p => ({ ...p, [item.id]: { ...p[item.id], robot_ids: selected ? p[item.id].robot_ids.filter((rid: string) => rid !== r.id) : [...p[item.id].robot_ids, r.id] } }))}
+                                  className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${selected ? 'bg-orange-500 border-orange-500 text-white' : 'border-[#333] text-gray-500 hover:border-orange-500'}`}>
+                                  {r.name}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                        <select value={editing.event_id} onChange={e => setEditingMedia(p => ({ ...p, [item.id]: { ...p[item.id], event_id: e.target.value } }))}
+                          className="w-full bg-[#111] border border-[#333] rounded px-2 py-1 text-xs focus:outline-none focus:border-orange-500">
+                          <option value="">No event</option>
+                          {regData?.events?.map((e: any) => <option key={e.id} value={e.id}>{e.title}</option>)}
+                        </select>
+                        <button onClick={() => stopEdit(item.id)} className="text-xs text-gray-500 hover:text-gray-300 text-left">Cancel</button>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold truncate">{item.title || item.url}</p>
+                        {item.caption && <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{item.caption}</p>}
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {bots.map((b: string) => <span key={b} className="text-xs bg-orange-500/10 text-orange-400 px-1.5 py-0.5 rounded-full">{b}</span>)}
+                          {item.event?.title && <span className="text-xs bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded-full">{item.event.title}</span>}
+                        </div>
+                      </>
+                    )}
                   </div>
-                  <button onClick={() => handleMediaDelete(item.id)}
-                    className="flex items-center gap-1 text-xs border border-red-700 text-red-400 hover:bg-red-700/10 px-3 py-1.5 rounded shrink-0">
-                    <Trash2 size={11} /> Delete
-                  </button>
+                  <div className="flex flex-col gap-2 shrink-0">
+                    {editing ? (
+                      <button onClick={async () => { await handleMediaApprove(item.id, true); stopEdit(item.id) }}
+                        className="flex items-center gap-1 text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-bold">
+                        <Save size={11} /> Save
+                      </button>
+                    ) : (
+                      <button onClick={() => startEdit(item)}
+                        className="flex items-center gap-1 text-xs border border-[#333] text-gray-400 hover:border-orange-500 hover:text-orange-400 px-3 py-1.5 rounded font-bold">
+                        <Pencil size={11} /> Edit
+                      </button>
+                    )}
+                    <button onClick={() => handleMediaDelete(item.id)}
+                      className="flex items-center gap-1 text-xs border border-red-700 text-red-400 hover:bg-red-700/10 px-3 py-1.5 rounded">
+                      <Trash2 size={11} /> Delete
+                    </button>
+                  </div>
                 </div>
               )
             })}
