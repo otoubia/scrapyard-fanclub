@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle, XCircle, Clock, RefreshCw, Cpu, Calendar, Plus, Trash2 } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, RefreshCw, Cpu, Calendar, Plus, Trash2, Image as ImageIcon, Video } from 'lucide-react'
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
@@ -16,6 +16,8 @@ export default function AdminPage() {
   const [liveSummary, setLiveSummary] = useState<string | null>(null)
   const [regData, setRegData] = useState<{ events: any[], robots: any[], registrations: Record<string, {resultId: string, robotId: string}[]> } | null>(null)
   const [regLoading, setRegLoading] = useState(false)
+  const [pendingMedia, setPendingMedia] = useState<any[]>([])
+  const [mediaLoading, setMediaLoading] = useState(false)
 
   async function fetchPosts(secret: string) {
     setLoading(true)
@@ -27,6 +29,7 @@ export default function AdminPage() {
       const robotsRes = await fetch('/api/admin/robots', { headers: { authorization: `Bearer ${secret}` } })
       if (robotsRes.ok) setRobots(await robotsRes.json())
       fetchRegistrations(secret)
+      fetchPendingMedia(secret)
     } finally { setLoading(false) }
   }
 
@@ -36,6 +39,23 @@ export default function AdminPage() {
       const res = await fetch('/api/admin/registrations', { headers: { authorization: `Bearer ${secret}` } })
       if (res.ok) setRegData(await res.json())
     } finally { setRegLoading(false) }
+  }
+
+  async function fetchPendingMedia(secret: string) {
+    setMediaLoading(true)
+    try {
+      const res = await fetch('/api/admin/media', { headers: { authorization: `Bearer ${secret}` } })
+      if (res.ok) setPendingMedia(await res.json())
+    } finally { setMediaLoading(false) }
+  }
+
+  async function handleMediaApprove(id: string, approved: boolean) {
+    await fetch('/api/admin/media', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', authorization: `Bearer ${password}` },
+      body: JSON.stringify({ id, approved }),
+    })
+    fetchPendingMedia(password)
   }
 
   async function toggleRegistration(robotId: string, eventId: string, isRegistered: boolean) {
@@ -213,9 +233,55 @@ export default function AdminPage() {
         </section>
       )}
 
+      {/* Pending Media */}
       <section className="mb-10">
         <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-          <Clock size={18} className="text-yellow-400" /> Pending ({pending.length})
+          <ImageIcon size={18} className="text-purple-400" /> Pending Media ({pendingMedia.length})
+        </h2>
+        {mediaLoading && <p className="text-gray-500 text-sm">Loading...</p>}
+        {!mediaLoading && pendingMedia.length === 0 && <p className="text-gray-500 text-sm">No pending media.</p>}
+        <div className="flex flex-col gap-4">
+          {pendingMedia.map((item: any) => {
+            const isYt = item.url?.includes('youtube') || item.url?.includes('youtu.be')
+            const bots = item.media_robot_tags?.map((t: any) => t.robot?.name).filter(Boolean) ?? []
+            return (
+              <div key={item.id} className="card p-4 flex gap-4">
+                <div className="w-32 h-24 bg-[#1a1a1a] rounded-lg overflow-hidden shrink-0 flex items-center justify-center">
+                  {item.type === 'photo'
+                    ? <img src={item.url} alt={item.title ?? ''} className="w-full h-full object-cover" />
+                    : isYt
+                      ? <img src={`https://img.youtube.com/vi/${item.url.match(/(?:v=|youtu\.be\/)([^&\s]+)/)?.[1]}/mqdefault.jpg`} alt="" className="w-full h-full object-cover" />
+                      : <Video size={24} className="text-gray-600" />
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm truncate">{item.title || item.url}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">by {item.author_name}</p>
+                  {item.caption && <p className="text-xs text-gray-400 mt-1 line-clamp-2">{item.caption}</p>}
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {bots.map((b: string) => <span key={b} className="text-xs bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full">{b}</span>)}
+                    {item.event?.title && <span className="text-xs bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full">{item.event.title}</span>}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button onClick={() => handleMediaApprove(item.id, true)}
+                    className="flex items-center gap-1 text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded font-bold">
+                    <CheckCircle size={11} /> Approve
+                  </button>
+                  <button onClick={() => handleMediaApprove(item.id, false)}
+                    className="flex items-center gap-1 text-xs bg-red-700 hover:bg-red-800 text-white px-3 py-1.5 rounded font-bold">
+                    <XCircle size={11} /> Reject
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+          <Clock size={18} className="text-yellow-400" /> Pending Posts ({pending.length})
         </h2>
         {pending.length === 0 ? (
           <p className="text-gray-500 text-sm">No pending posts.</p>

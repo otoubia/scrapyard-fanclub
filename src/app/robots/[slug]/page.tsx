@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { ROBOTS_SEED } from '@/lib/robots-data'
 import { notFound } from 'next/navigation'
-import { Cpu, Trophy, Calendar } from 'lucide-react'
+import { Cpu, Trophy, Calendar, Camera } from 'lucide-react'
+import Link from 'next/link'
 import { formatDateShort } from '@/lib/utils'
 
 export const revalidate = 300
@@ -52,6 +53,10 @@ export default async function RobotPage({ params }: { params: Promise<{ slug: st
               )}
             </div>
             {robot.description && <p className="text-gray-300 leading-relaxed">{robot.description}</p>}
+            <Link href={`/submit?robot_id=${robot.id}`}
+              className="inline-flex items-center gap-1.5 text-xs border border-[#2a2a2a] text-gray-400 px-3 py-1.5 rounded-lg hover:border-orange-500 hover:text-orange-400 transition-colors mt-3">
+              <Camera size={11} /> Share Media
+            </Link>
             {robot.stats?.nhrl_tournaments > 0 && (
               <div className="mt-3 flex flex-wrap gap-3">
                 <div className="bg-[#1a1a1a] rounded-lg px-4 py-2 text-center">

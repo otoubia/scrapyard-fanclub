@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 
 export async function GET(req: NextRequest) {
-  const auth = req.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.ADMIN_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  // Allow public access for bot list (used on submit form)
+  // Admin-only routes use the media/posts endpoints instead
   const supabase = await createServiceClient()
   const { data, error } = await supabase
     .from('robots')

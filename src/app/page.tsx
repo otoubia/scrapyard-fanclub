@@ -17,7 +17,7 @@ export default async function HomePage() {
     const [eventsRes, highlightsRes, mediaRes, robotsRes, robotResultCountsRes, postsRes, competitorsRes] = await Promise.all([
       supabase.from('events').select('*, external_id').order('start_date', { ascending: false }).limit(100),
       supabase.from('highlights').select('*, robot:robots(*), event:events(*)').order('created_at', { ascending: false }),
-      supabase.from('media').select('*, robot:robots(*), event:events(*)').eq('approved', true).order('created_at', { ascending: false }).limit(12),
+      supabase.from('media').select('*, event:events(id,title), media_robot_tags(robot:robots(id,name,slug))').eq('approved', true).order('created_at', { ascending: false }).limit(12),
       supabase.from('robots').select('*').eq('active', true),
       supabase.from('robot_results').select('robot_id, event_id'),
       supabase.from('posts').select('*').eq('approved', true).order('created_at', { ascending: false }).limit(6),
