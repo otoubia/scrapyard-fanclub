@@ -239,7 +239,7 @@ export default function SubmitPage({
         {/* Type selector */}
         <div className="flex gap-3">
           {(['photo', 'video'] as const).map(t => (
-            <button key={t} type="button" onClick={() => setType(t)}
+            <button key={t} type="button" onClick={() => { setType(t); if (t === 'video') setInputMode('url') }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${type === t ? 'bg-orange-500 text-white' : 'border border-[#2a2a2a] text-gray-400 hover:border-orange-500'}`}>
               {t === 'photo' ? <ImageIcon size={14} /> : <Video size={14} />}
               {t.charAt(0).toUpperCase() + t.slice(1)}
@@ -249,16 +249,18 @@ export default function SubmitPage({
 
         {/* Input mode */}
         <div className="card p-5 flex flex-col gap-4">
-          <div className="flex gap-2 mb-1">
-            <button type="button" onClick={() => setInputMode('file')}
-              className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded font-bold transition-colors ${inputMode === 'file' ? 'bg-orange-500 text-white' : 'border border-[#2a2a2a] text-gray-400'}`}>
-              <Upload size={11} /> Upload File
-            </button>
-            <button type="button" onClick={() => setInputMode('url')}
-              className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded font-bold transition-colors ${inputMode === 'url' ? 'bg-orange-500 text-white' : 'border border-[#2a2a2a] text-gray-400'}`}>
-              <Link size={11} /> Paste URL
-            </button>
-          </div>
+          {type === 'photo' && (
+            <div className="flex gap-2 mb-1">
+              <button type="button" onClick={() => setInputMode('file')}
+                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded font-bold transition-colors ${inputMode === 'file' ? 'bg-orange-500 text-white' : 'border border-[#2a2a2a] text-gray-400'}`}>
+                <Upload size={11} /> Upload File
+              </button>
+              <button type="button" onClick={() => setInputMode('url')}
+                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded font-bold transition-colors ${inputMode === 'url' ? 'bg-orange-500 text-white' : 'border border-[#2a2a2a] text-gray-400'}`}>
+                <Link size={11} /> Paste URL
+              </button>
+            </div>
+          )}
 
           {inputMode === 'file' ? (
             <div>
@@ -286,6 +288,9 @@ export default function SubmitPage({
             </div>
           ) : (
             <div>
+              {type === 'video' && (
+                <p className="text-xs text-gray-500 mb-2">Videos must be hosted on YouTube or Vimeo — paste the link below.</p>
+              )}
               <input value={url} onChange={e => handleUrl(e.target.value)}
                 className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-500"
                 placeholder={type === 'video' ? 'https://youtube.com/watch?v=...' : 'https://example.com/photo.jpg'} />
