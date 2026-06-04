@@ -58,10 +58,12 @@ function EventCard({ event, isLive = false }: { event: any; isLive?: boolean }) 
 
       {event.description && <p className="text-sm text-gray-400 line-clamp-2">{event.description}</p>}
       <div className="flex gap-2 mt-auto pt-2 flex-wrap">
-        <Link href={`/gallery?event_id=${event.id}`}
-          className="flex items-center gap-1 text-xs border border-[#2a2a2a] text-gray-400 px-3 py-1.5 rounded hover:border-orange-500 hover:text-orange-400 transition-colors">
-          <Images size={11} /> Gallery
-        </Link>
+        {event.hasMedia && (
+          <Link href={`/gallery?event_id=${event.id}`}
+            className="flex items-center gap-1 text-xs border border-[#2a2a2a] text-gray-400 px-3 py-1.5 rounded hover:border-orange-500 hover:text-orange-400 transition-colors">
+            <Images size={11} /> Gallery
+          </Link>
+        )}
         <Link href={`/submit?event_id=${event.id}`}
           className="flex items-center gap-1 text-xs border border-[#2a2a2a] text-gray-400 px-3 py-1.5 rounded hover:border-orange-500 hover:text-orange-400 transition-colors">
           <Camera size={11} /> Share Media

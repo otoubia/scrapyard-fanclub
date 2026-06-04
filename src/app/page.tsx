@@ -14,10 +14,11 @@ export default async function HomePage() {
 
   try {
     const supabase = await createClient()
-    const [eventsRes, highlightsRes, mediaRes, robotsRes, robotResultCountsRes, postsRes, competitorsRes] = await Promise.all([
+    const [eventsRes, highlightsRes, mediaRes, eventMediaRes, robotsRes, robotResultCountsRes, postsRes, competitorsRes] = await Promise.all([
       supabase.from('events').select('*, external_id').order('start_date', { ascending: false }).limit(100),
       supabase.from('highlights').select('*, robot:robots(*), event:events(*)').order('created_at', { ascending: false }),
       supabase.from('media').select('*, event:events(id,title), media_robot_tags(robot:robots(id,name,slug))').eq('approved', true).order('created_at', { ascending: false }).limit(12),
+      supabase.from('media').select('event_id').eq('approved', true).not('event_id', 'is', null),
       supabase.from('robots').select('*').eq('active', true),
       supabase.from('robot_results').select('robot_id, event_id'),
       supabase.from('posts').select('*').eq('approved', true).order('created_at', { ascending: false }).limit(6),
@@ -29,6 +30,7 @@ export default async function HomePage() {
       new Date(b.event?.start_date ?? 0).getTime() - new Date(a.event?.start_date ?? 0).getTime()
     )
     media = mediaRes.data ?? []
+    const eventIdsWithMedia = new Set((eventMediaRes.data ?? []).map((m: any) => m.event_id))
     // Count events per robot and sort by most events
     const resultCounts: Record<string, number> = {}
     for (const r of robotResultCountsRes.data ?? []) {
@@ -53,8 +55,8 @@ export default async function HomePage() {
       ...robotResultCountsRes.data?.map((r: any) => r.event_id) ?? [],
       ...competitorsRes.data?.map((r: any) => r.event_id) ?? [],
     ])
-    // Attach competitors to events
-    events = events.map((e: any) => ({ ...e, competitors: competitorMap[e.id] ?? [] }))
+    // Attach competitors and media flag to events
+    events = events.map((e: any) => ({ ...e, competitors: competitorMap[e.id] ?? [], hasMedia: eventIdsWithMedia.has(e.id) }))
   } catch {
     // Supabase not yet configured — placeholder UI shown
   }

@@ -12,6 +12,7 @@ export default async function RobotPage({ params }: { params: Promise<{ slug: st
   let robot: any = null
   let results: any[] = []
   let media: any[] = []
+  let hasGallery = false
 
   try {
     const supabase = await createClient()
@@ -19,12 +20,14 @@ export default async function RobotPage({ params }: { params: Promise<{ slug: st
     robot = data
 
     if (robot) {
-      const [resultsRes, mediaRes] = await Promise.all([
+      const [resultsRes, mediaRes, robotMediaCountRes] = await Promise.all([
         supabase.from('robot_results').select('*, event:events(id, title, start_date, location, external_id, status)').eq('robot_id', robot.id).order('created_at', { ascending: false }).limit(100),
         supabase.from('media').select('*').eq('robot_id', robot.id).eq('approved', true).order('created_at', { ascending: false }),
+        supabase.from('media_robot_tags').select('id').eq('robot_id', robot.id).limit(1),
       ])
       results = resultsRes.data ?? []
       media = mediaRes.data ?? []
+      hasGallery = (robotMediaCountRes.data?.length ?? 0) > 0
     }
   } catch {}
 
@@ -54,10 +57,12 @@ export default async function RobotPage({ params }: { params: Promise<{ slug: st
             </div>
             {robot.description && <p className="text-gray-300 leading-relaxed">{robot.description}</p>}
             <div className="flex gap-2 mt-3">
-              <Link href={`/gallery?robot_id=${robot.id}`}
-                className="inline-flex items-center gap-1.5 text-xs border border-[#2a2a2a] text-gray-400 px-3 py-1.5 rounded-lg hover:border-orange-500 hover:text-orange-400 transition-colors">
-                <Images size={11} /> Gallery
-              </Link>
+              {hasGallery && (
+                <Link href={`/gallery?robot_id=${robot.id}`}
+                  className="inline-flex items-center gap-1.5 text-xs border border-[#2a2a2a] text-gray-400 px-3 py-1.5 rounded-lg hover:border-orange-500 hover:text-orange-400 transition-colors">
+                  <Images size={11} /> Gallery
+                </Link>
+              )}
               <Link href={`/submit?robot_id=${robot.id}`}
                 className="inline-flex items-center gap-1.5 text-xs border border-[#2a2a2a] text-gray-400 px-3 py-1.5 rounded-lg hover:border-orange-500 hover:text-orange-400 transition-colors">
                 <Camera size={11} /> Share Media
