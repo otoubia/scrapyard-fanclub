@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle, XCircle, Clock, RefreshCw, Cpu, Calendar, Plus, Trash2, Image as ImageIcon, Video, Pencil, Save } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, RefreshCw, Cpu, Calendar, Plus, Trash2, Image as ImageIcon, Video, Pencil, Save, Search } from 'lucide-react'
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
@@ -16,6 +16,9 @@ export default function AdminPage() {
   const [liveSummary, setLiveSummary] = useState<string | null>(null)
   const [regData, setRegData] = useState<{ events: any[], robots: any[], registrations: Record<string, {resultId: string, robotId: string}[]> } | null>(null)
   const [regLoading, setRegLoading] = useState(false)
+  const [allEvents, setAllEvents] = useState<any[]>([])
+  const [editBotSearch, setEditBotSearch] = useState<Record<string, string>>({})
+  const [editEventSearch, setEditEventSearch] = useState<Record<string, string>>({})
   const [pendingMedia, setPendingMedia] = useState<any[]>([])
   const [approvedMedia, setApprovedMedia] = useState<any[]>([])
   const [mediaLoading, setMediaLoading] = useState(false)
@@ -32,6 +35,9 @@ export default function AdminPage() {
       if (robotsRes.ok) setRobots(await robotsRes.json())
       fetchRegistrations(secret)
       fetchPendingMedia(secret)
+      // Load all events for editing
+      fetch('/api/admin/all-events', { headers: { authorization: `Bearer ${secret}` } })
+        .then(r => r.ok ? r.json() : []).then(setAllEvents).catch(() => {})
     } finally { setLoading(false) }
   }
 
@@ -401,10 +407,16 @@ export default function AdminPage() {
                           className="w-full bg-[#111] border border-[#333] rounded px-2 py-1 text-xs focus:outline-none focus:border-orange-500" placeholder="Title" />
                         <textarea value={editing.caption} onChange={e => setEditingMedia(p => ({ ...p, [item.id]: { ...p[item.id], caption: e.target.value } }))}
                           className="w-full bg-[#111] border border-[#333] rounded px-2 py-1 text-xs focus:outline-none focus:border-orange-500 resize-none" rows={2} placeholder="Caption" />
+                        {/* Bot search + tags */}
                         <div>
                           <p className="text-xs text-gray-500 mb-1">Bots</p>
-                          <div className="flex flex-wrap gap-1">
-                            {robots.map((r: any) => {
+                          <div className="relative mb-1.5">
+                            <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500" />
+                            <input value={editBotSearch[item.id] ?? ''} onChange={e => setEditBotSearch(p => ({ ...p, [item.id]: e.target.value }))}
+                              className="w-full bg-[#111] border border-[#333] rounded pl-6 pr-2 py-1 text-xs focus:outline-none focus:border-orange-500" placeholder="Search bots..." />
+                          </div>
+                          <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+                            {robots.filter((r: any) => r.name.toLowerCase().includes((editBotSearch[item.id] ?? '').toLowerCase())).map((r: any) => {
                               const selected = editing.robot_ids.includes(r.id)
                               return (
                                 <button key={r.id} type="button"
@@ -416,11 +428,38 @@ export default function AdminPage() {
                             })}
                           </div>
                         </div>
-                        <select value={editing.event_id} onChange={e => setEditingMedia(p => ({ ...p, [item.id]: { ...p[item.id], event_id: e.target.value } }))}
-                          className="w-full bg-[#111] border border-[#333] rounded px-2 py-1 text-xs focus:outline-none focus:border-orange-500">
-                          <option value="">No event</option>
-                          {regData?.events?.map((e: any) => <option key={e.id} value={e.id}>{e.title}</option>)}
-                        </select>
+                        {/* Event search */}
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Event</p>
+                          {editing.event_id && (
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">
+                                {allEvents.find(e => e.id === editing.event_id)?.title ?? 'Selected'}
+                              </span>
+                              <button type="button" onClick={() => setEditingMedia(p => ({ ...p, [item.id]: { ...p[item.id], event_id: '' } }))}
+                                className="text-xs text-gray-500 hover:text-red-400"><XCircle size={11} /></button>
+                            </div>
+                          )}
+                          <div className="relative mb-1">
+                            <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500" />
+                            <input value={editEventSearch[item.id] ?? ''} onChange={e => setEditEventSearch(p => ({ ...p, [item.id]: e.target.value }))}
+                              className="w-full bg-[#111] border border-[#333] rounded pl-6 pr-2 py-1 text-xs focus:outline-none focus:border-orange-500" placeholder="Search events..." />
+                          </div>
+                          {(editEventSearch[item.id] ?? '').length > 0 && (
+                            <div className="flex flex-col gap-0.5 max-h-28 overflow-y-auto border border-[#222] rounded">
+                              {allEvents.filter(e => e.title.toLowerCase().includes((editEventSearch[item.id] ?? '').toLowerCase())).slice(0, 10).map(e => (
+                                <button key={e.id} type="button"
+                                  onClick={() => { setEditingMedia(p => ({ ...p, [item.id]: { ...p[item.id], event_id: e.id } })); setEditEventSearch(p => ({ ...p, [item.id]: '' })) }}
+                                  className="text-left text-xs px-2 py-1.5 hover:bg-[#1a1a1a] text-gray-300 transition-colors">
+                                  {e.title}
+                                  <span className="text-gray-600 ml-2 text-xs">
+                                    {e.start_date && !e.start_date.startsWith('2020') ? new Date(e.start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : ''}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                         <button onClick={() => stopEdit(item.id)} className="text-xs text-gray-500 hover:text-gray-300 text-left">Cancel</button>
                       </div>
                     ) : (
