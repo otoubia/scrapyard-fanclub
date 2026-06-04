@@ -76,7 +76,6 @@ export default async function HomePage() {
         <EventsSection past={pastEvents} current={currentEvents} upcoming={upcomingEvents} />
         <HighlightsSection highlights={highlights} />
         <GallerySection media={media} />
-        <RobotsSection robots={robots} />
         <PostsSection posts={posts} />
       </div>
     </div>

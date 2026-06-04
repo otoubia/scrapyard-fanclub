@@ -57,8 +57,8 @@ export default function SubmitPage({
   const [previewUrl, setPreviewUrl] = useState('')
   const [title, setTitle] = useState('')
   const [caption, setCaption] = useState('')
-  const [authorName, setAuthorName] = useState('')
-  const [authorEmail, setAuthorEmail] = useState('')
+  const [authorName] = useState('Anonymous')
+  const [authorEmail] = useState('')
   const [selectedRobots, setSelectedRobots] = useState<Robot[]>([])
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [robotSearch, setRobotSearch] = useState('')
@@ -400,22 +400,6 @@ export default function SubmitPage({
                 )}
               </button>
             ))}
-          </div>
-        </div>
-
-        {/* Author info */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-semibold text-gray-300 mb-1.5 block">Your Name <span className="text-red-400">*</span></label>
-            <input required value={authorName} onChange={e => setAuthorName(e.target.value)}
-              className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-500"
-              placeholder="Jane Smith" />
-          </div>
-          <div>
-            <label className="text-sm font-semibold text-gray-300 mb-1.5 block">Email <span className="text-gray-600 font-normal">(optional)</span></label>
-            <input type="email" value={authorEmail} onChange={e => setAuthorEmail(e.target.value)}
-              className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-500"
-              placeholder="jane@example.com" />
           </div>
         </div>
 
