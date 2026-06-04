@@ -91,7 +91,11 @@ export default async function RobotPage({ params }: { params: Promise<{ slug: st
                     </p>
                   )}
                   {r.event?.location && (
-                    <p className="text-xs text-gray-500 truncate max-w-xs">{r.event.location}</p>
+                    <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.event.location)}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-gray-500 truncate max-w-xs hover:text-orange-400 transition-colors">
+                      {r.event.location}
+                    </a>
                   )}
                   </div>
                 </div>

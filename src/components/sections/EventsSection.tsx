@@ -37,7 +37,11 @@ function EventCard({ event, isLive = false }: { event: any; isLive?: boolean }) 
           </span>
         )}
         {event.location && (
-          <span className="flex items-center gap-1.5"><MapPin size={13} /> {event.location}</span>
+          <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
+            target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 hover:text-orange-400 transition-colors">
+            <MapPin size={13} /> {event.location}
+          </a>
         )}
       </div>
 
