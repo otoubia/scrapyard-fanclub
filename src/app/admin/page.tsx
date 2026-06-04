@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle, XCircle, Clock, RefreshCw, Cpu, Calendar, Plus, Trash2, Image as ImageIcon, Video } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, RefreshCw, Cpu, Calendar, Plus, Trash2, Image as ImageIcon, Video, Pencil, Save } from 'lucide-react'
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
@@ -17,7 +17,9 @@ export default function AdminPage() {
   const [regData, setRegData] = useState<{ events: any[], robots: any[], registrations: Record<string, {resultId: string, robotId: string}[]> } | null>(null)
   const [regLoading, setRegLoading] = useState(false)
   const [pendingMedia, setPendingMedia] = useState<any[]>([])
+  const [approvedMedia, setApprovedMedia] = useState<any[]>([])
   const [mediaLoading, setMediaLoading] = useState(false)
+  const [editingMedia, setEditingMedia] = useState<Record<string, { title: string; caption: string }>>({})
 
   async function fetchPosts(secret: string) {
     setLoading(true)
@@ -45,17 +47,39 @@ export default function AdminPage() {
     setMediaLoading(true)
     try {
       const res = await fetch('/api/admin/media', { headers: { authorization: `Bearer ${secret}` } })
-      if (res.ok) setPendingMedia(await res.json())
+      if (res.ok) {
+        const data = await res.json()
+        setPendingMedia(data.pending ?? [])
+        setApprovedMedia(data.approved ?? [])
+      }
     } finally { setMediaLoading(false) }
   }
 
   async function handleMediaApprove(id: string, approved: boolean) {
+    const edits = editingMedia[id]
     await fetch('/api/admin/media', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', authorization: `Bearer ${password}` },
-      body: JSON.stringify({ id, approved }),
+      body: JSON.stringify({ id, approved, title: edits?.title, caption: edits?.caption }),
     })
     fetchPendingMedia(password)
+  }
+
+  async function handleMediaDelete(id: string) {
+    await fetch('/api/admin/media', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', authorization: `Bearer ${password}` },
+      body: JSON.stringify({ id }),
+    })
+    fetchPendingMedia(password)
+  }
+
+  function startEdit(item: any) {
+    setEditingMedia(prev => ({ ...prev, [item.id]: { title: item.title ?? '', caption: item.caption ?? '' } }))
+  }
+
+  function stopEdit(id: string) {
+    setEditingMedia(prev => { const n = { ...prev }; delete n[id]; return n })
   }
 
   async function toggleRegistration(robotId: string, eventId: string, isRegistered: boolean) {
@@ -244,6 +268,7 @@ export default function AdminPage() {
           {pendingMedia.map((item: any) => {
             const isYt = item.url?.includes('youtube') || item.url?.includes('youtu.be')
             const bots = item.media_robot_tags?.map((t: any) => t.robot?.name).filter(Boolean) ?? []
+            const editing = editingMedia[item.id]
             return (
               <div key={item.id} className="card p-4 flex gap-4">
                 <div className="w-32 h-24 bg-[#1a1a1a] rounded-lg overflow-hidden shrink-0 flex items-center justify-center">
@@ -255,9 +280,22 @@ export default function AdminPage() {
                   }
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm truncate">{item.title || item.url}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">by {item.author_name}</p>
-                  {item.caption && <p className="text-xs text-gray-400 mt-1 line-clamp-2">{item.caption}</p>}
+                  {editing ? (
+                    <div className="flex flex-col gap-2">
+                      <input value={editing.title} onChange={e => setEditingMedia(p => ({ ...p, [item.id]: { ...p[item.id], title: e.target.value } }))}
+                        className="w-full bg-[#111] border border-[#333] rounded px-2 py-1 text-xs focus:outline-none focus:border-orange-500"
+                        placeholder="Title" />
+                      <textarea value={editing.caption} onChange={e => setEditingMedia(p => ({ ...p, [item.id]: { ...p[item.id], caption: e.target.value } }))}
+                        className="w-full bg-[#111] border border-[#333] rounded px-2 py-1 text-xs focus:outline-none focus:border-orange-500 resize-none"
+                        rows={2} placeholder="Caption" />
+                      <button onClick={() => stopEdit(item.id)} className="text-xs text-gray-500 hover:text-gray-300 text-left">Cancel</button>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="font-semibold text-sm truncate">{item.title || item.url}</p>
+                      {item.caption && <p className="text-xs text-gray-400 mt-1 line-clamp-2">{item.caption}</p>}
+                    </>
+                  )}
                   <div className="flex flex-wrap gap-1 mt-2">
                     {bots.map((b: string) => <span key={b} className="text-xs bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full">{b}</span>)}
                     {item.event?.title && <span className="text-xs bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full">{item.event.title}</span>}
@@ -268,7 +306,17 @@ export default function AdminPage() {
                     className="flex items-center gap-1 text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded font-bold">
                     <CheckCircle size={11} /> Approve
                   </button>
-                  <button onClick={() => handleMediaApprove(item.id, false)}
+                  {editing
+                    ? <button onClick={() => handleMediaApprove(item.id, true)}
+                        className="flex items-center gap-1 text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-bold">
+                        <Save size={11} /> Save
+                      </button>
+                    : <button onClick={() => startEdit(item)}
+                        className="flex items-center gap-1 text-xs border border-[#333] text-gray-400 hover:border-orange-500 hover:text-orange-400 px-3 py-1.5 rounded font-bold">
+                        <Pencil size={11} /> Edit
+                      </button>
+                  }
+                  <button onClick={() => handleMediaDelete(item.id)}
                     className="flex items-center gap-1 text-xs bg-red-700 hover:bg-red-800 text-white px-3 py-1.5 rounded font-bold">
                     <XCircle size={11} /> Reject
                   </button>
@@ -278,6 +326,37 @@ export default function AdminPage() {
           })}
         </div>
       </section>
+
+      {/* Approved media */}
+      {approvedMedia.length > 0 && (
+        <section className="mb-10">
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <CheckCircle size={18} className="text-green-400" /> Approved Media ({approvedMedia.length})
+          </h2>
+          <div className="flex flex-col gap-3">
+            {approvedMedia.map((item: any) => {
+              const bots = item.media_robot_tags?.map((t: any) => t.robot?.name).filter(Boolean) ?? []
+              return (
+                <div key={item.id} className="card p-3 flex items-center gap-3">
+                  <div className="w-16 h-12 bg-[#1a1a1a] rounded overflow-hidden shrink-0">
+                    {item.type === 'photo' && <img src={item.url} alt="" className="w-full h-full object-cover" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{item.title || item.url}</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {bots.map((b: string) => <span key={b} className="text-xs bg-orange-500/10 text-orange-400 px-1.5 py-0.5 rounded-full">{b}</span>)}
+                    </div>
+                  </div>
+                  <button onClick={() => handleMediaDelete(item.id)}
+                    className="flex items-center gap-1 text-xs border border-red-700 text-red-400 hover:bg-red-700/10 px-3 py-1.5 rounded shrink-0">
+                    <Trash2 size={11} /> Delete
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
       <section className="mb-10">
         <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
