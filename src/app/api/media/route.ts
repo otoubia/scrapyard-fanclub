@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'Scrap Yard Fan Club <noreply@scrapyard-fanclub.vercel.app>',
+          from: 'Scrap Yard Fan Club <onboarding@resend.dev>',
           to: ['otoubia@yahoo.com'],
           subject: `New ${type ?? 'media'} submitted for review`,
           html: `
