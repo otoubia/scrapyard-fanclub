@@ -1,6 +1,21 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { ArrowLeft, Image as ImageIcon, Camera } from 'lucide-react'
+import { ArrowLeft, Image as ImageIcon, Camera, Calendar, MapPin } from 'lucide-react'
+import { formatDateShort } from '@/lib/utils'
+
+// Extract "City, ST" from a full address string
+function cityState(location: string | null): string | null {
+  if (!location) return null
+  // Format: "Street, City, ST ZIP, USA" or "Venue, City, ST ZIP, USA"
+  const parts = location.split(',').map(p => p.trim())
+  if (parts.length >= 3) {
+    const cityPart = parts[parts.length - 3] // City
+    const stateZip = parts[parts.length - 2] // "ST ZIP"
+    const state = stateZip.trim().split(' ')[0] // Just "ST"
+    if (cityPart && state) return `${cityPart}, ${state}`
+  }
+  return null
+}
 
 export const revalidate = 300
 
@@ -26,10 +41,21 @@ function MediaCard({ item }: { item: any }) {
           {bots.map((b: string) => (
             <span key={b} className="text-xs bg-orange-500/10 text-orange-400 px-1.5 py-0.5 rounded-full">{b}</span>
           ))}
-          {item.event?.title && (
-            <span className="text-xs bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded-full">{item.event.title}</span>
-          )}
         </div>
+        {item.event && (
+          <div className="mt-2 flex flex-col gap-0.5">
+            {item.event.start_date && !item.event.start_date.startsWith('2020') && (
+              <span className="text-xs text-gray-500 flex items-center gap-1">
+                <Calendar size={10} /> {formatDateShort(item.event.start_date)}
+              </span>
+            )}
+            {cityState(item.event.location) && (
+              <span className="text-xs text-gray-500 flex items-center gap-1">
+                <MapPin size={10} /> {cityState(item.event.location)}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -52,7 +78,7 @@ export default async function GalleryPage({
     // Gallery for a specific event
     const [mediaRes, eventRes] = await Promise.all([
       supabase.from('media')
-        .select('*, event:events(id,title), media_robot_tags(robot:robots(id,name,slug))')
+        .select('*, event:events(id,title,start_date,location), media_robot_tags(robot:robots(id,name,slug))')
         .eq('approved', true)
         .eq('event_id', event_id)
         .order('created_at', { ascending: false }),
@@ -83,7 +109,7 @@ export default async function GalleryPage({
     // Full gallery
     const { data } = await supabase
       .from('media')
-      .select('*, event:events(id,title), media_robot_tags(robot:robots(id,name,slug))')
+      .select('*, event:events(id,title,start_date,location), media_robot_tags(robot:robots(id,name,slug))')
       .eq('approved', true)
       .order('created_at', { ascending: false })
       .limit(100)
