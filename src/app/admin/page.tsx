@@ -497,58 +497,6 @@ export default function AdminPage() {
         </section>
       )}
 
-      <section className="mb-10">
-        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-          <Clock size={18} className="text-yellow-400" /> Pending Posts ({pending.length})
-        </h2>
-        {pending.length === 0 ? (
-          <p className="text-gray-500 text-sm">No pending posts.</p>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {pending.map(post => (
-              <div key={post.id} className="card p-5">
-                <div className="flex justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-bold truncate">{post.title}</h3>
-                    <p className="text-xs text-gray-500 mb-2">by {post.author_name} ({post.author_email})</p>
-                    <p className="text-sm text-gray-400 line-clamp-3">{post.content}</p>
-                  </div>
-                  <div className="flex flex-col gap-2 shrink-0">
-                    <button onClick={() => handleApprove(post.id, true)}
-                      className="flex items-center gap-1 text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded font-bold">
-                      <CheckCircle size={12} /> Approve
-                    </button>
-                    <button onClick={() => handleApprove(post.id, false)}
-                      className="flex items-center gap-1 text-xs bg-red-700 hover:bg-red-800 text-white px-3 py-1.5 rounded font-bold">
-                      <XCircle size={12} /> Reject
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-          <CheckCircle size={18} className="text-green-400" /> Approved ({approved.length})
-        </h2>
-        <div className="flex flex-col gap-3">
-          {approved.slice(0, 10).map(post => (
-            <div key={post.id} className="card p-4 flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <h3 className="font-semibold text-sm truncate">{post.title}</h3>
-                <p className="text-xs text-gray-500">by {post.author_name}</p>
-              </div>
-              <button onClick={() => handleApprove(post.id, false)}
-                className="text-xs border border-red-700 text-red-400 hover:bg-red-700/10 px-3 py-1.5 rounded shrink-0">
-                Unpublish
-              </button>
-            </div>
-          ))}
-        </div>
-      </section>
     </div>
   )
 }

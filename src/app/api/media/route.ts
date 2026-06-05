@@ -40,6 +40,33 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Send email notification
+    if (process.env.RESEND_API_KEY) {
+      const bots = robot_ids?.length ? `Bots: ${robot_ids.length} tagged` : 'No bots tagged'
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'Scrap Yard Fan Club <noreply@scrapyard-fanclub.vercel.app>',
+          to: ['otoubia@yahoo.com'],
+          subject: `New ${type ?? 'media'} submitted for review`,
+          html: `
+            <p>A new ${type ?? 'media'} was submitted and is pending review.</p>
+            <ul>
+              <li><strong>Type:</strong> ${type ?? 'unknown'}</li>
+              <li><strong>Title:</strong> ${title || '(none)'}</li>
+              <li><strong>${bots}</strong></li>
+              <li><strong>URL:</strong> ${url}</li>
+            </ul>
+            <p><a href="https://scrapyard-fanclub.vercel.app/admin">Review it in the admin panel →</a></p>
+          `,
+        }),
+      }).catch(() => {}) // Don't fail the request if email fails
+    }
+
     return NextResponse.json({ ok: true, id: media.id })
   } catch {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 })

@@ -4,24 +4,22 @@ import HighlightsSection from '@/components/sections/HighlightsSection'
 import GallerySection from '@/components/sections/GallerySection'
 import RobotsSection from '@/components/sections/RobotsSection'
 import HeroSection from '@/components/sections/HeroSection'
-import PostsSection from '@/components/sections/PostsSection'
 
 export const revalidate = 300
 
 export default async function HomePage() {
-  let events: any[] = [], highlights: any[] = [], media: any[] = [], robots: any[] = [], posts: any[] = []
+  let events: any[] = [], highlights: any[] = [], media: any[] = [], robots: any[] = []
   let eventIdsWithResults = new Set<string>()
 
   try {
     const supabase = await createClient()
-    const [eventsRes, highlightsRes, mediaRes, eventMediaRes, robotsRes, robotResultCountsRes, postsRes, competitorsRes] = await Promise.all([
+    const [eventsRes, highlightsRes, mediaRes, eventMediaRes, robotsRes, robotResultCountsRes, competitorsRes] = await Promise.all([
       supabase.from('events').select('*, external_id').order('start_date', { ascending: false }).limit(100),
       supabase.from('highlights').select('*, robot:robots(*), event:events(*)').order('created_at', { ascending: false }),
       supabase.from('media').select('*, event:events(id,title), media_robot_tags(robot:robots(id,name,slug))').eq('approved', true).order('created_at', { ascending: false }).limit(12),
       supabase.from('media').select('event_id').eq('approved', true).not('event_id', 'is', null),
       supabase.from('robots').select('*').eq('active', true),
       supabase.from('robot_results').select('robot_id, event_id'),
-      supabase.from('posts').select('*').eq('approved', true).order('created_at', { ascending: false }).limit(6),
       supabase.from('robot_results').select('event_id, robot:robots(name, slug)'),
     ])
     events = eventsRes.data ?? []
@@ -42,8 +40,6 @@ export default async function HomePage() {
       if (bCount !== aCount) return bCount - aCount
       return a.name.localeCompare(b.name)
     })
-    posts = postsRes.data ?? []
-
     // Build a map of event_id → competing robots (pending/upcoming)
     const competitorMap: Record<string, any[]> = {}
     for (const r of competitorsRes.data ?? []) {
@@ -78,7 +74,6 @@ export default async function HomePage() {
         <EventsSection past={pastEvents} current={currentEvents} upcoming={upcomingEvents} />
         <HighlightsSection highlights={highlights} />
         <GallerySection media={media} />
-        <PostsSection posts={posts} />
       </div>
     </div>
   )
