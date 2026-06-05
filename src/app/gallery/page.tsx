@@ -41,6 +41,9 @@ function MediaCard({ item }: { item: any }) {
           {bots.map((b: string) => (
             <span key={b} className="text-xs bg-orange-500/10 text-orange-400 px-1.5 py-0.5 rounded-full">{b}</span>
           ))}
+          {item.event?.title && (
+            <span className="text-xs bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded-full">{item.event.title}</span>
+          )}
         </div>
         {item.event && (
           <div className="mt-2 flex flex-col gap-0.5">
@@ -92,7 +95,7 @@ export default async function GalleryPage({
     // Gallery for a specific robot — media tagged with this robot via media_robot_tags
     const { data: taggedMedia } = await supabase
       .from('media_robot_tags')
-      .select('media:media(*, event:events(id,title), media_robot_tags(robot:robots(id,name,slug)))')
+      .select('media:media(*, event:events(id,title,start_date,location), media_robot_tags(robot:robots(id,name,slug)))')
       .eq('robot_id', robot_id)
 
     const { data: robot } = await supabase.from('robots').select('name, slug').eq('id', robot_id).single()

@@ -61,13 +61,14 @@ function MediaCard({ item }: { item: any }) {
       </div>
       <div className="p-3">
         {item.title && <p className="text-sm font-semibold">{item.title}</p>}
-        {item.media_robot_tags?.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1.5">
-            {item.media_robot_tags.map((t: any) => (
-              <span key={t.robot?.id} className="text-xs bg-orange-500/10 text-orange-400 px-1.5 py-0.5 rounded-full">{t.robot?.name}</span>
-            ))}
-          </div>
-        )}
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {item.media_robot_tags?.map((t: any) => (
+            <span key={t.robot?.id} className="text-xs bg-orange-500/10 text-orange-400 px-1.5 py-0.5 rounded-full">{t.robot?.name}</span>
+          ))}
+          {item.event?.title && (
+            <span className="text-xs bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded-full">{item.event.title}</span>
+          )}
+        </div>
         {item.event && (
           <div className="mt-1.5 flex flex-col gap-0.5">
             {item.event.start_date && !item.event.start_date.startsWith('2020') && (
