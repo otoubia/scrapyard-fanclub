@@ -1,12 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle, XCircle, Clock, RefreshCw, Cpu, Calendar, Plus, Trash2, Image as ImageIcon, Video, Pencil, Save, Search } from 'lucide-react'
+import { CheckCircle, XCircle, RefreshCw, Cpu, Calendar, Plus, Trash2, Image as ImageIcon, Video, Pencil, Save, Search } from 'lucide-react'
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [authed, setAuthed] = useState(false)
-  const [posts, setPosts] = useState<any[]>([])
   const [robots, setRobots] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -29,7 +28,6 @@ export default function AdminPage() {
     try {
       const res = await fetch('/api/admin/posts', { headers: { authorization: `Bearer ${secret}` } })
       if (!res.ok) { setAuthed(false); return }
-      setPosts(await res.json())
       setAuthed(true)
       const robotsRes = await fetch('/api/admin/robots', { headers: { authorization: `Bearer ${secret}` } })
       if (robotsRes.ok) setRobots(await robotsRes.json())
@@ -111,15 +109,6 @@ export default function AdminPage() {
     fetchRegistrations(password)
   }
 
-  async function handleApprove(id: string, approved: boolean) {
-    await fetch('/api/admin/approve-post', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', authorization: `Bearer ${password}` },
-      body: JSON.stringify({ id, approved }),
-    })
-    fetchPosts(password)
-  }
-
   async function syncOneBot(slug: string) {
     setSyncingSlug(slug)
     setResultsSummary(null)
@@ -171,9 +160,6 @@ export default function AdminPage() {
       </div>
     )
   }
-
-  const pending = posts.filter(p => !p.approved)
-  const approved = posts.filter(p => p.approved)
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
