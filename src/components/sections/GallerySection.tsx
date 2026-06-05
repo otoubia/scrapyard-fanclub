@@ -15,7 +15,7 @@ function cityState(location: string | null): string | null {
   return null
 }
 
-const TABS = ['all', 'video', 'photo', 'cad'] as const
+const TABS = ['all', 'video', 'photo'] as const
 
 function MediaCard({ item }: { item: any }) {
   if (item.type === 'video') {
@@ -91,7 +91,7 @@ function MediaCard({ item }: { item: any }) {
 export default function GallerySection({ media }: { media: any[] }) {
   const [tab, setTab] = useState<typeof TABS[number]>('all')
   const filtered = tab === 'all' ? media : media.filter(m => m.type === tab)
-  const icons = { all: null, video: <Video size={14} />, photo: <ImageIcon size={14} />, cad: <Cpu size={14} /> }
+  const icons = { all: null, video: <Video size={14} />, photo: <ImageIcon size={14} /> }
 
   return (
     <section id="gallery">
