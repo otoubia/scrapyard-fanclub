@@ -7,7 +7,6 @@ export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [authed, setAuthed] = useState(false)
   const [robots, setRobots] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncingSlug, setSyncingSlug] = useState<string | null>(null)
   const [resultsSummary, setResultsSummary] = useState<string | null>(null)
@@ -24,7 +23,6 @@ export default function AdminPage() {
   const [editingMedia, setEditingMedia] = useState<Record<string, { title: string; caption: string; robot_ids: string[]; event_id: string }>>({})
 
   async function fetchPosts(secret: string) {
-    setLoading(true)
     try {
       const res = await fetch('/api/admin/posts', { headers: { authorization: `Bearer ${secret}` } })
       if (!res.ok) { setAuthed(false); return }
@@ -36,7 +34,7 @@ export default function AdminPage() {
       // Load all events for editing
       fetch('/api/admin/all-events', { headers: { authorization: `Bearer ${secret}` } })
         .then(r => r.ok ? r.json() : []).then(setAllEvents).catch(() => {})
-    } finally { setLoading(false) }
+    } finally {}
   }
 
   async function fetchRegistrations(secret: string) {

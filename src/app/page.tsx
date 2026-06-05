@@ -2,23 +2,21 @@ import { createClient } from '@/lib/supabase/server'
 import EventsSection from '@/components/sections/EventsSection'
 import HighlightsSection from '@/components/sections/HighlightsSection'
 import GallerySection from '@/components/sections/GallerySection'
-import RobotsSection from '@/components/sections/RobotsSection'
 import HeroSection from '@/components/sections/HeroSection'
 
 export const revalidate = 300
 
 export default async function HomePage() {
-  let events: any[] = [], highlights: any[] = [], media: any[] = [], robots: any[] = []
+  let events: any[] = [], highlights: any[] = [], media: any[] = []
   let eventIdsWithResults = new Set<string>()
 
   try {
     const supabase = await createClient()
-    const [eventsRes, highlightsRes, mediaRes, eventMediaRes, robotsRes, robotResultCountsRes, competitorsRes] = await Promise.all([
+    const [eventsRes, highlightsRes, mediaRes, eventMediaRes, robotResultCountsRes, competitorsRes] = await Promise.all([
       supabase.from('events').select('*, external_id').order('start_date', { ascending: false }).limit(100),
       supabase.from('highlights').select('*, robot:robots(*), event:events(*)').order('created_at', { ascending: false }),
       supabase.from('media').select('*, event:events(id,title,start_date,location), media_robot_tags(robot:robots(id,name,slug))').eq('approved', true).order('created_at', { ascending: false }).limit(12),
       supabase.from('media').select('event_id').eq('approved', true).not('event_id', 'is', null),
-      supabase.from('robots').select('*').eq('active', true),
       supabase.from('robot_results').select('robot_id, event_id'),
       supabase.from('robot_results').select('event_id, robot:robots(name, slug)'),
     ])
@@ -29,17 +27,6 @@ export default async function HomePage() {
     )
     media = mediaRes.data ?? []
     const eventIdsWithMedia = new Set((eventMediaRes.data ?? []).map((m: any) => m.event_id))
-    // Count events per robot and sort by most events
-    const resultCounts: Record<string, number> = {}
-    for (const r of robotResultCountsRes.data ?? []) {
-      resultCounts[r.robot_id] = (resultCounts[r.robot_id] ?? 0) + 1
-    }
-    robots = (robotsRes.data ?? []).sort((a: any, b: any) => {
-      const aCount = resultCounts[a.id] ?? 0
-      const bCount = resultCounts[b.id] ?? 0
-      if (bCount !== aCount) return bCount - aCount
-      return a.name.localeCompare(b.name)
-    })
     // Build a map of event_id → competing robots (pending/upcoming)
     const competitorMap: Record<string, any[]> = {}
     for (const r of competitorsRes.data ?? []) {
