@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { ROBOTS_SEED } from '@/lib/robots-data'
 import { notFound } from 'next/navigation'
-import { Cpu, Trophy, Calendar, Camera, Images } from 'lucide-react'
+import { Cpu, Trophy, Calendar, Camera, Images, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import { formatDateShort } from '@/lib/utils'
 
@@ -56,7 +56,7 @@ export default async function RobotPage({ params }: { params: Promise<{ slug: st
               )}
             </div>
             {robot.description && <p className="text-gray-300 leading-relaxed">{robot.description}</p>}
-            <div className="flex gap-2 mt-3">
+            <div className="flex flex-wrap gap-2 mt-3">
               {hasGallery && (
                 <Link href={`/gallery?robot_id=${robot.id}`}
                   className="inline-flex items-center gap-1.5 text-xs border border-[#2a2a2a] text-gray-400 px-3 py-1.5 rounded-lg hover:border-orange-500 hover:text-orange-400 transition-colors">
@@ -67,6 +67,12 @@ export default async function RobotPage({ params }: { params: Promise<{ slug: st
                 className="inline-flex items-center gap-1.5 text-xs border border-[#2a2a2a] text-gray-400 px-3 py-1.5 rounded-lg hover:border-orange-500 hover:text-orange-400 transition-colors">
                 <Camera size={11} /> Share Media
               </Link>
+              {robot.rce_url && (
+                <Link href={robot.rce_url} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs border border-[#2a2a2a] text-gray-400 px-3 py-1.5 rounded-lg hover:border-orange-500 hover:text-orange-400 transition-colors">
+                  <ExternalLink size={11} /> RCE Page
+                </Link>
+              )}
             </div>
             {robot.stats?.nhrl_tournaments > 0 && (
               <div className="mt-3 flex flex-wrap gap-3">
