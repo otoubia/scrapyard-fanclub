@@ -101,7 +101,7 @@ export default function GallerySection({ media }: { media: any[] }) {
           <button key={t} onClick={() => setTab(t)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold uppercase tracking-wide transition-colors
               ${tab === t ? 'bg-orange-500 text-white' : 'border border-[#2a2a2a] text-gray-400 hover:border-orange-500 hover:text-orange-500'}`}>
-            {icons[t]} {t === 'cad' ? 'CAD' : t.charAt(0).toUpperCase() + t.slice(1)}
+            {icons[t]} {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
