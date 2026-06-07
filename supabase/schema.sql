@@ -90,6 +90,18 @@ create table if not exists highlights (
   created_at timestamptz default now()
 );
 
+-- Event links (bracket, stream, etc. for event cards)
+create table if not exists event_links (
+  id uuid primary key default uuid_generate_v4(),
+  event_id uuid references events(id) on delete cascade not null,
+  url text not null,
+  label text not null,
+  link_type text not null default 'other' check (link_type in ('bracket','stream','results','other')),
+  source text not null default 'manual',
+  created_at timestamptz default now()
+);
+create index if not exists event_links_event_id on event_links(event_id);
+
 -- Enable Row Level Security (public read, service role write)
 alter table events enable row level security;
 alter table robots enable row level security;
@@ -97,6 +109,7 @@ alter table robot_results enable row level security;
 alter table media enable row level security;
 alter table posts enable row level security;
 alter table highlights enable row level security;
+alter table event_links enable row level security;
 
 -- Public read policies
 create policy "Public read events" on events for select using (true);
@@ -105,6 +118,7 @@ create policy "Public read results" on robot_results for select using (true);
 create policy "Public read approved media" on media for select using (approved = true);
 create policy "Public read approved posts" on posts for select using (approved = true);
 create policy "Public read highlights" on highlights for select using (true);
+create policy "Public read event_links" on event_links for select using (true);
 
 -- Public insert for posts (submissions)
 create policy "Anyone can submit posts" on posts for insert with check (true);
