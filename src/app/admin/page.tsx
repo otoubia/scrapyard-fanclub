@@ -23,7 +23,7 @@ export default function AdminPage() {
   const [linkCandidates, setLinkCandidates] = useState<any[]>([])
   const [linksLoading, setLinksLoading] = useState(false)
   const [showAddLink, setShowAddLink] = useState(false)
-  const [newLink, setNewLink] = useState({ event_id: '', url: '', label: '', link_type: 'other' })
+  const [newLink, setNewLink] = useState({ event_id: '', url: '', label: '', link_type: 'bracket' })
 
   async function fetchPosts(secret: string) {
     try {
@@ -237,7 +237,7 @@ export default function AdminPage() {
       <section className="mb-10">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <h2 className="text-lg font-bold flex items-center gap-2">
-            <Link2 size={16} className="text-orange-400" /> Today&apos;s Event Links
+            <Link2 size={16} className="text-orange-400" /> Event Links
           </h2>
           <div className="flex gap-2">
             <button onClick={() => setShowAddLink(v => !v)}
@@ -289,8 +289,6 @@ export default function AdminPage() {
                 className="bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-orange-500">
                 <option value="bracket">Bracket</option>
                 <option value="stream">Stream</option>
-                <option value="results">Results</option>
-                <option value="other">Other</option>
               </select>
             </div>
             <div className="flex gap-2">
