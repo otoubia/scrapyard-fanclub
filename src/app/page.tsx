@@ -90,9 +90,19 @@ export default async function HomePage() {
     dbStreamLinks: eventLinksMap[e.id]?.streamLinks ?? [],
   })
 
+  const GSCRL_STREAM = 'https://www.youtube.com/@gscrl'
+
   const pastEvents = pastEventsBase.map(attachLinks)
   const upcomingEvents = upcomingEventsBase.map(attachLinks)
-  const liveEvents = liveEventsBase.map(attachLinks)
+  const liveEvents = liveEventsBase.map((e: any) => {
+    const attached = attachLinks(e)
+    // Auto-inject GSCRL default stream for live GSCRL events that have no stream link
+    if (attached.dbStreamLinks.length === 0 && !e.livestream_url &&
+        e.title?.toLowerCase().includes('gscrl')) {
+      return { ...attached, dbStreamLinks: [{ url: GSCRL_STREAM, label: 'GSCRL Live Stream' }] }
+    }
+    return attached
+  })
 
   return (
     <div>
