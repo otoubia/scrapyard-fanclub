@@ -288,12 +288,9 @@ export default function SubmitPage({
             </div>
           ) : (
             <div>
-              {type === 'video' && (
-                <p className="text-xs text-gray-500 mb-2">Videos must be hosted on YouTube or Vimeo — paste the link below.</p>
-              )}
               <input value={url} onChange={e => handleUrl(e.target.value)}
                 className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-500"
-                placeholder={type === 'video' ? 'https://youtube.com/watch?v=...' : 'https://example.com/photo.jpg'} />
+                placeholder={type === 'video' ? 'https://youtube.com/watch?v=... or any video link' : 'https://example.com/photo.jpg'} />
               {previewUrl && type === 'video' && url.includes('youtube') && (
                 <img src={previewUrl} className="mt-3 rounded-lg max-h-40 mx-auto" alt="YouTube thumbnail" />
               )}

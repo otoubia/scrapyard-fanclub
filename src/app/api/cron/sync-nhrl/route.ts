@@ -199,11 +199,13 @@ export async function GET(req: NextRequest) {
   // 2. Scrape upcoming events from nhrl.io/events
   const upcomingFromWebsite = await fetchUpcomingNHRLEvents()
   const now = new Date()
-  // Upsert upcoming events
+  // Upsert upcoming events; mark as past if the date has already passed
   for (const ev of upcomingFromWebsite) {
-    if (!ev.date || new Date(ev.date) <= now) continue
+    if (!ev.date) continue
+    const newStatus = new Date(ev.date) > now ? 'upcoming' : 'past'
     const { data: existing } = await supabase.from('events').select('id').eq('external_id', ev.external_id).single()
     if (!existing) {
+      if (newStatus !== 'upcoming') continue // don't create new rows for past scraped events
       await supabase.from('events').insert({
         title: ev.title, event_source: 'nhrl', external_id: ev.external_id,
         status: 'upcoming', start_date: ev.date, location: NHRL_LOCATION,
@@ -211,7 +213,7 @@ export async function GET(req: NextRequest) {
       })
     } else {
       await supabase.from('events').update({
-        title: ev.title, status: 'upcoming', start_date: ev.date,
+        title: ev.title, status: newStatus, start_date: ev.date,
         updated_at: new Date().toISOString(),
       }).eq('id', existing.id)
     }

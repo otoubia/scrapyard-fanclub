@@ -50,15 +50,37 @@ export default async function HomePage() {
     ? events.filter(e => e.status === 'past' && eventIdsWithResults.has(e.id))
     : events.filter(e => e.status === 'past')
   const currentEvents = events.filter(e => e.status === 'current')
+
+  // Guard upcoming by date so stale 'upcoming' rows don't show after the event day
+  const todayMidnight = new Date()
+  todayMidnight.setHours(0, 0, 0, 0)
   const upcomingEvents = events
-    .filter(e => e.status === 'upcoming')
+    .filter(e => e.status === 'upcoming' && new Date(e.end_date || e.start_date) >= todayMidnight)
     .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
+
+  // Fetch today's event links (shown in Live Now tab)
+  let todayLinks: any[] = []
+  try {
+    const supabase2 = await createClient()
+    const todayStr = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
+    const todayEventIds = events
+      .filter(e => e.start_date?.slice(0, 10) === todayStr)
+      .map(e => e.id)
+    if (todayEventIds.length > 0) {
+      const { data: linksData } = await supabase2
+        .from('event_links')
+        .select('*, event:events(id, title, start_date)')
+        .in('event_id', todayEventIds)
+        .order('created_at')
+      todayLinks = linksData ?? []
+    }
+  } catch {}
 
   return (
     <div>
       <HeroSection currentEvents={currentEvents} />
       <div className="max-w-7xl mx-auto px-4 py-12 space-y-20">
-        <EventsSection past={pastEvents} current={currentEvents} upcoming={upcomingEvents} />
+        <EventsSection past={pastEvents} current={currentEvents} upcoming={upcomingEvents} todayLinks={todayLinks} />
         <HighlightsSection highlights={highlights} />
         <GallerySection media={media} />
       </div>
