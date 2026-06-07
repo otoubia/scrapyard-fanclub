@@ -63,8 +63,9 @@ export default async function HomePage() {
   try {
     const supabase2 = await createClient()
     const todayStr = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
+    // Include events starting today OR currently marked live (start_date may be yesterday if sync ran before midnight UTC)
     const todayEventIds = events
-      .filter(e => e.start_date?.slice(0, 10) === todayStr)
+      .filter(e => e.start_date?.slice(0, 10) === todayStr || e.status === 'current')
       .map(e => e.id)
     if (todayEventIds.length > 0) {
       const { data: linksData } = await supabase2

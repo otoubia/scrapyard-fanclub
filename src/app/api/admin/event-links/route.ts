@@ -25,8 +25,8 @@ function linksForEvent(event: any): Array<{ url: string; label: string; link_typ
     if (nhrlMatch) {
       const tid = nhrlMatch[1]
       links.push({ url: `https://brettzone.nhrl.io/brettZone/bracketView.php?tournamentID=${tid}`, label: 'BrettZone Bracket', link_type: 'bracket', source: 'brettzone' })
-      links.push({ url: NHRL_YOUTUBE, label: 'NHRL Live Stream', link_type: 'stream', source: 'nhrl' })
       links.push({ url: NHRL_SITE, label: 'NHRL Website', link_type: 'other', source: 'nhrl' })
+      // Stream link omitted here — only added when BrettZone confirms live activity today
     }
   }
   if (event.truefinals_url) {
@@ -55,13 +55,19 @@ export async function GET(req: NextRequest) {
       .gte('start_date', `${day}T00:00:00Z`)
       .lte('start_date', `${day}T23:59:59Z`)
 
-    // Also find live NHRL tournaments from BrettZone
+    // Find NHRL tournaments with fights from TODAY (not just last 24h, which bleeds into the next day)
     let liveTournamentIds: string[] = []
+    let streamIsLive = false
     try {
       const r = await fetch(`${BRETTZONE}/fightsLast24Hours.php`, { next: { revalidate: 0 } })
       if (r.ok) {
         const d = await r.json()
-        liveTournamentIds = [...new Set<string>((d.fights ?? []).map((f: any) => f.tournamentID as string))]
+        const todayFights = (d.fights ?? []).filter((f: any) => {
+          // startTime format from BrettZone is typically "YYYY-MM-DD HH:MM:SS"
+          return f.startTime?.slice(0, 10) === day
+        })
+        liveTournamentIds = [...new Set<string>(todayFights.map((f: any) => f.tournamentID as string))]
+        streamIsLive = liveTournamentIds.length > 0
       }
     } catch {}
 
@@ -73,14 +79,20 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Add BrettZone bracket links for live tournaments not yet matched to today's events
+    // Add links for live tournaments found via BrettZone that aren't already covered above
     const knownExternalIds = new Set((todayEvents ?? []).map(e => e.external_id))
     for (const tid of liveTournamentIds) {
       const externalId = `nhrl:${tid}`
-      if (knownExternalIds.has(externalId)) continue
-      const { data: dbEvent } = await supabase.from('events').select('id, title').eq('external_id', externalId).single()
-      if (dbEvent) {
-        candidates.push({ event_id: dbEvent.id, event_title: dbEvent.title, url: `https://brettzone.nhrl.io/brettZone/bracketView.php?tournamentID=${tid}`, label: 'BrettZone Bracket', link_type: 'bracket', source: 'brettzone' })
+      const { data: dbEvent } = await supabase.from('events').select('id, title, external_id, truefinals_url, livestream_url').eq('external_id', externalId).single()
+      if (!dbEvent) continue
+      if (!knownExternalIds.has(externalId)) {
+        // This event wasn't in today's date range but IS live — add all its links
+        for (const link of linksForEvent(dbEvent)) {
+          candidates.push({ event_id: dbEvent.id, event_title: dbEvent.title, ...link })
+        }
+      }
+      // Stream link only when BrettZone confirms fights are happening today
+      if (streamIsLive) {
         candidates.push({ event_id: dbEvent.id, event_title: dbEvent.title, url: NHRL_YOUTUBE, label: 'NHRL Live Stream', link_type: 'stream', source: 'nhrl' })
       }
     }
