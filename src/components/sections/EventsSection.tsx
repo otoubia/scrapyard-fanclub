@@ -17,12 +17,27 @@ function brettzoneBracketUrl(external_id: string | undefined): string | null {
   return m ? `https://brettzone.nhrl.io/brettZone/bracketView.php?tournamentID=${m[1]}` : null
 }
 
+type LinkEntry = { url: string; label: string }
+
 function EventCard({ event, isLive = false }: { event: any; isLive?: boolean }) {
   const eventUrl = rceEventUrl(event.external_id)
-  const bracketUrl = brettzoneBracketUrl(event.external_id) ?? event.dbBracketUrl ?? null
-  const streamUrl = event.livestream_url || event.dbStreamUrl || null
   const isPast = event.status === 'past'
   const competitors: any[] = event.competitors ?? []
+
+  const dbBracketLinks: LinkEntry[] = event.dbBracketLinks ?? []
+  const brettzoneFallback = brettzoneBracketUrl(event.external_id)
+  // Use admin-submitted bracket links if any; fall back to auto-generated BrettZone URL for NHRL
+  const bracketLinks: LinkEntry[] = dbBracketLinks.length > 0
+    ? dbBracketLinks
+    : (brettzoneFallback ? [{ url: brettzoneFallback, label: 'Bracket' }] : [])
+
+  const dbStreamLinks: LinkEntry[] = event.dbStreamLinks ?? []
+  // Stream links only for non-past events; fall back to event.livestream_url if no DB links
+  const streamLinks: LinkEntry[] = isPast ? [] : (
+    dbStreamLinks.length > 0
+      ? dbStreamLinks
+      : (event.livestream_url ? [{ url: event.livestream_url, label: 'Stream' }] : [])
+  )
 
   return (
     <div className={`card p-5 flex flex-col gap-3 ${isLive ? 'border-orange-500 live-badge' : ''}`}>
@@ -83,24 +98,24 @@ function EventCard({ event, isLive = false }: { event: any; isLive?: boolean }) 
             <ExternalLink size={11} /> RCE Page
           </Link>
         )}
-        {bracketUrl && (
-          <Link href={bracketUrl} target="_blank"
+        {bracketLinks.map((link, i) => (
+          <Link key={i} href={link.url} target="_blank"
             className="flex items-center gap-1 text-xs border border-[#2a2a2a] text-gray-400 px-3 py-1.5 rounded hover:border-orange-500 hover:text-orange-400 transition-colors">
-            <Trophy size={11} /> Bracket
+            <Trophy size={11} /> {link.label}
           </Link>
-        )}
+        ))}
         {event.truefinals_url && (
           <Link href={event.truefinals_url} target="_blank"
             className="text-xs bg-orange-500 text-white px-3 py-1.5 rounded font-bold hover:bg-orange-600 transition-colors">
             {isLive ? '🔴 Watch Live' : 'Results'}
           </Link>
         )}
-        {!isPast && streamUrl && (
-          <Link href={streamUrl} target="_blank"
+        {streamLinks.map((link, i) => (
+          <Link key={i} href={link.url} target="_blank"
             className="text-xs border border-orange-500 text-orange-500 px-3 py-1.5 rounded font-bold hover:bg-orange-500/10 transition-colors">
-            Stream
+            {link.label}
           </Link>
-        )}
+        ))}
       </div>
     </div>
   )

@@ -10,7 +10,6 @@ export default async function HomePage() {
   let events: any[] = [], highlights: any[] = [], media: any[] = []
   let eventIdsWithResults = new Set<string>()
   const todayStr = new Date().toISOString().slice(0, 10)
-  let pastBracketMap: Record<string, string> = {}
 
   try {
     const supabase = await createClient()
@@ -38,71 +37,63 @@ export default async function HomePage() {
       ...competitorsRes.data?.map((r: any) => r.event_id) ?? [],
     ])
     events = events.map((e: any) => ({ ...e, competitors: competitorMap[e.id] ?? [], hasMedia: eventIdsWithMedia.has(e.id) }))
-
-    // Fetch bracket links for past events (used for non-NHRL events that don't have a BrettZone URL)
-    const pastEventIds = events.filter((e: any) => e.status === 'past').map((e: any) => e.id)
-    if (pastEventIds.length > 0) {
-      const { data: bracketData } = await supabase
-        .from('event_links')
-        .select('event_id, url')
-        .in('event_id', pastEventIds)
-        .eq('link_type', 'bracket')
-      for (const l of bracketData ?? []) {
-        if (!pastBracketMap[l.event_id]) pastBracketMap[l.event_id] = l.url
-      }
-    }
   } catch {
     // Supabase not yet configured — placeholder UI shown
   }
 
   // Only show past events where at least one team bot competed
-  const pastEvents = (eventIdsWithResults.size > 0
+  const pastEventsBase = eventIdsWithResults.size > 0
     ? events.filter(e => e.status === 'past' && eventIdsWithResults.has(e.id))
-    : events.filter(e => e.status === 'past'))
-    .map((e: any) => ({ ...e, dbBracketUrl: pastBracketMap[e.id] ?? null }))
+    : events.filter(e => e.status === 'past')
 
   // Upcoming: exclude today's events so they appear under Live instead
   const todayMidnight = new Date()
   todayMidnight.setHours(0, 0, 0, 0)
-  const upcomingEvents = events
+  const upcomingEventsBase = events
     .filter(e => e.status === 'upcoming' &&
       e.start_date?.slice(0, 10) !== todayStr &&
       new Date(e.end_date || e.start_date) >= todayMidnight)
     .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
 
-  // Fetch today's event links for stream/bracket on live events
-  let todayStreamByEvent: Record<string, string> = {}
-  let todayBracketByEvent: Record<string, string> = {}
+  // Live events: status=current OR start_date=today
+  const liveEventsBase = events.filter(e =>
+    e.status === 'current' || e.start_date?.slice(0, 10) === todayStr
+  )
+
+  // Fetch bracket and stream links for ALL displayed events in one query
+  type LinkEntry = { url: string; label: string }
+  const eventLinksMap: Record<string, { bracketLinks: LinkEntry[]; streamLinks: LinkEntry[] }> = {}
   try {
-    const supabase2 = await createClient()
-    const todayEventIds = events
-      .filter(e => e.start_date?.slice(0, 10) === todayStr || e.status === 'current')
-      .map(e => e.id)
-    if (todayEventIds.length > 0) {
+    const allIds = [...new Set([
+      ...pastEventsBase.map((e: any) => e.id),
+      ...upcomingEventsBase.map((e: any) => e.id),
+      ...liveEventsBase.map((e: any) => e.id),
+    ])]
+    if (allIds.length > 0) {
+      const supabase2 = await createClient()
       const { data: linksData } = await supabase2
         .from('event_links')
-        .select('*, event:events(id, title, start_date)')
-        .in('event_id', todayEventIds)
+        .select('event_id, url, label, link_type')
+        .in('event_id', allIds)
+        .in('link_type', ['bracket', 'stream'])
         .order('created_at')
-      for (const link of linksData ?? []) {
-        if (link.link_type === 'stream' && !todayStreamByEvent[link.event_id]) {
-          todayStreamByEvent[link.event_id] = link.url
-        }
-        if (link.link_type === 'bracket' && !todayBracketByEvent[link.event_id]) {
-          todayBracketByEvent[link.event_id] = link.url
-        }
+      for (const l of linksData ?? []) {
+        if (!eventLinksMap[l.event_id]) eventLinksMap[l.event_id] = { bracketLinks: [], streamLinks: [] }
+        if (l.link_type === 'bracket') eventLinksMap[l.event_id].bracketLinks.push({ url: l.url, label: l.label })
+        if (l.link_type === 'stream') eventLinksMap[l.event_id].streamLinks.push({ url: l.url, label: l.label })
       }
     }
   } catch {}
 
-  // Live events: status=current OR start_date=today, with stream/bracket attached
-  const liveEvents = events
-    .filter(e => e.status === 'current' || e.start_date?.slice(0, 10) === todayStr)
-    .map((e: any) => ({
-      ...e,
-      dbStreamUrl: todayStreamByEvent[e.id] ?? null,
-      dbBracketUrl: todayBracketByEvent[e.id] ?? null,
-    }))
+  const attachLinks = (e: any) => ({
+    ...e,
+    dbBracketLinks: eventLinksMap[e.id]?.bracketLinks ?? [],
+    dbStreamLinks: eventLinksMap[e.id]?.streamLinks ?? [],
+  })
+
+  const pastEvents = pastEventsBase.map(attachLinks)
+  const upcomingEvents = upcomingEventsBase.map(attachLinks)
+  const liveEvents = liveEventsBase.map(attachLinks)
 
   return (
     <div>
