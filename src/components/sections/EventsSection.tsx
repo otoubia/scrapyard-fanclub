@@ -32,12 +32,12 @@ function EventCard({ event, isLive = false }: { event: any; isLive?: boolean }) 
     : (brettzoneFallback ? [{ url: brettzoneFallback, label: 'Bracket' }] : [])
 
   const dbStreamLinks: LinkEntry[] = event.dbStreamLinks ?? []
-  // Stream links only for non-past events; fall back to event.livestream_url if no DB links
-  const streamLinks: LinkEntry[] = isPast ? [] : (
+  // Stream links only for live (same-day) events
+  const streamLinks: LinkEntry[] = isLive ? (
     dbStreamLinks.length > 0
       ? dbStreamLinks
       : (event.livestream_url ? [{ url: event.livestream_url, label: 'Stream' }] : [])
-  )
+  ) : []
 
   return (
     <div className={`card p-5 flex flex-col gap-3 ${isLive ? 'border-orange-500 live-badge' : ''}`}>

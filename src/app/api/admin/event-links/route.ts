@@ -123,17 +123,9 @@ export async function GET(req: NextRequest) {
   }
 
   if (all === '1') {
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - 60)
-    const { data: recentEvents } = await supabase
-      .from('events').select('id')
-      .gte('start_date', cutoff.toISOString())
-    const ids = (recentEvents ?? []).map(e => e.id)
-    if (!ids.length) return NextResponse.json([])
     const { data } = await supabase
       .from('event_links')
       .select('*, event:events(id, title, start_date)')
-      .in('event_id', ids)
       .order('created_at', { ascending: false })
     return NextResponse.json(data ?? [])
   }
