@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle, XCircle, RefreshCw, Cpu, Calendar, Plus, Trash2, Image as ImageIcon, Video, Pencil, Save, Search, Link2, Radio, Trophy, Tv, BarChart2, ExternalLink } from 'lucide-react'
+import { CheckCircle, XCircle, RefreshCw, Cpu, Calendar, Plus, Trash2, Image as ImageIcon, Video, Pencil, Save, Search, Link2, Radio, Tv, BarChart2, ExternalLink } from 'lucide-react'
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
@@ -10,8 +10,6 @@ export default function AdminPage() {
   const [syncing, setSyncing] = useState(false)
   const [syncingSlug, setSyncingSlug] = useState<string | null>(null)
   const [resultsSummary, setResultsSummary] = useState<string | null>(null)
-  const [syncingLive, setSyncingLive] = useState(false)
-  const [liveSummary, setLiveSummary] = useState<string | null>(null)
   const [regData, setRegData] = useState<{ events: any[], robots: any[], registrations: Record<string, {resultId: string, robotId: string}[]> } | null>(null)
   const [regLoading, setRegLoading] = useState(false)
   const [allEvents, setAllEvents] = useState<any[]>([])
@@ -231,29 +229,6 @@ export default function AdminPage() {
         </button>
       </div>
 
-      {/* Live event tracking */}
-      <div className="mb-6 card p-4 flex items-center justify-between gap-4">
-        <div>
-          <p className="font-bold text-sm">🔴 Live Event Tracking</p>
-          <p className="text-xs text-gray-500 mt-0.5">Check for active NHRL fights happening right now</p>
-          {liveSummary && <p className="text-xs mt-1 text-red-400">{liveSummary}</p>}
-        </div>
-        <button onClick={async () => {
-          setSyncingLive(true); setLiveSummary(null)
-          try {
-            const res = await fetch('/api/cron/sync-live', { headers: { authorization: `Bearer ${password}` } })
-            const d = await res.json()
-            setLiveSummary(d.live
-              ? `🔴 LIVE: ${d.liveBots.join(', ')} at ${d.activeTournaments.join(', ')}`
-              : `No active event (${d.totalRecentFights ?? 0} fights in last 24h)`)
-          } finally { setSyncingLive(false) }
-        }} disabled={syncingLive}
-          className="flex items-center gap-2 border border-red-500 text-red-400 hover:bg-red-500/10 px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50 shrink-0">
-          <RefreshCw size={13} className={syncingLive ? 'animate-spin' : ''} />
-          {syncingLive ? 'Checking...' : 'Check Now'}
-        </button>
-      </div>
-
       {resultsSummary && (
         <div className="mb-6 card p-4 text-sm text-green-400 whitespace-pre-wrap">{resultsSummary}</div>
       )}
@@ -285,9 +260,24 @@ export default function AdminPage() {
               <select value={newLink.event_id} onChange={e => setNewLink(p => ({ ...p, event_id: e.target.value }))}
                 className="bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-orange-500 col-span-2">
                 <option value="">Select event…</option>
-                {allEvents.map((e: any) => (
-                  <option key={e.id} value={e.id}>{e.title} {e.start_date?.slice(0, 10)}</option>
-                ))}
+                {(() => {
+                  const todayStr = new Date().toISOString().slice(0, 10)
+                  const todayEvts = allEvents.filter((e: any) => e.start_date?.slice(0, 10) === todayStr)
+                  const upcomingEvts = allEvents.filter((e: any) => (e.start_date?.slice(0, 10) ?? '') > todayStr)
+                  const pastEvts = allEvents.filter((e: any) => (e.start_date?.slice(0, 10) ?? '') < todayStr)
+                  const fmt = (e: any) => `${e.title} (${e.start_date?.slice(0, 10) ?? ''})`
+                  return <>
+                    {todayEvts.length > 0 && <optgroup label="Today">
+                      {todayEvts.map((e: any) => <option key={e.id} value={e.id}>{fmt(e)}</option>)}
+                    </optgroup>}
+                    {upcomingEvts.length > 0 && <optgroup label="Upcoming">
+                      {[...upcomingEvts].sort((a: any, b: any) => a.start_date > b.start_date ? 1 : -1).map((e: any) => <option key={e.id} value={e.id}>{fmt(e)}</option>)}
+                    </optgroup>}
+                    {pastEvts.length > 0 && <optgroup label="Past">
+                      {pastEvts.slice(0, 30).map((e: any) => <option key={e.id} value={e.id}>{fmt(e)}</option>)}
+                    </optgroup>}
+                  </>
+                })()}
               </select>
               <input value={newLink.url} onChange={e => setNewLink(p => ({ ...p, url: e.target.value }))}
                 className="bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-orange-500 col-span-2"

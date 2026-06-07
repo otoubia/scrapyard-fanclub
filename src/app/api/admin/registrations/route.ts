@@ -12,9 +12,10 @@ export async function GET(req: NextRequest) {
   if (!checkAuth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const supabase = await createServiceClient()
 
+  const nowIso = new Date().toISOString()
   const [eventsRes, robotsRes, resultsRes] = await Promise.all([
     supabase.from('events').select('id, title, start_date, event_source')
-      .eq('status', 'upcoming').order('start_date', { ascending: true }),
+      .eq('status', 'upcoming').gt('start_date', nowIso).order('start_date', { ascending: true }),
     supabase.from('robots').select('id, name, slug').eq('active', true).order('name'),
     supabase.from('robot_results').select('id, robot_id, event_id')
       .is('placement', null),
