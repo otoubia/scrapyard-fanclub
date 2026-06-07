@@ -42,7 +42,7 @@ export default function AdminPage() {
   }
 
   async function fetchTodayLinks(secret: string) {
-    const res = await fetch('/api/admin/event-links?today=1', { headers: { authorization: `Bearer ${secret}` } })
+    const res = await fetch('/api/admin/event-links?all=1', { headers: { authorization: `Bearer ${secret}` } })
     if (res.ok) setTodayLinks(await res.json())
   }
 

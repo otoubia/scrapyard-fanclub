@@ -75,11 +75,10 @@ export default async function HomePage() {
         .from('event_links')
         .select('event_id, url, label, link_type')
         .in('event_id', allIds)
-        .in('link_type', ['bracket', 'stream'])
         .order('created_at')
       for (const l of linksData ?? []) {
         if (!eventLinksMap[l.event_id]) eventLinksMap[l.event_id] = { bracketLinks: [], streamLinks: [] }
-        if (l.link_type === 'bracket') eventLinksMap[l.event_id].bracketLinks.push({ url: l.url, label: l.label })
+        if (l.link_type === 'bracket' || l.link_type === 'other') eventLinksMap[l.event_id].bracketLinks.push({ url: l.url, label: l.label })
         if (l.link_type === 'stream') eventLinksMap[l.event_id].streamLinks.push({ url: l.url, label: l.label })
       }
     }
