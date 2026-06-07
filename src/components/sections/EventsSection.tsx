@@ -11,8 +11,16 @@ function rceEventUrl(external_id: string | undefined): string | null {
   return m ? `https://www.robotcombatevents.com/events/${m[1]}` : null
 }
 
+function brettzoneBracketUrl(external_id: string | undefined): string | null {
+  if (!external_id) return null
+  const m = external_id.match(/^nhrl:(.+)$/)
+  return m ? `https://brettzone.nhrl.io/brettZone/bracketView.php?tournamentID=${m[1]}` : null
+}
+
 function EventCard({ event, isLive = false }: { event: any; isLive?: boolean }) {
   const eventUrl = rceEventUrl(event.external_id)
+  const bracketUrl = brettzoneBracketUrl(event.external_id)
+  const isPast = event.status === 'past'
   const competitors: any[] = event.competitors ?? []
 
   return (
@@ -74,13 +82,19 @@ function EventCard({ event, isLive = false }: { event: any; isLive?: boolean }) 
             <ExternalLink size={11} /> RCE Page
           </Link>
         )}
+        {bracketUrl && (
+          <Link href={bracketUrl} target="_blank"
+            className="flex items-center gap-1 text-xs border border-[#2a2a2a] text-gray-400 px-3 py-1.5 rounded hover:border-orange-500 hover:text-orange-400 transition-colors">
+            <Trophy size={11} /> Bracket
+          </Link>
+        )}
         {event.truefinals_url && (
           <Link href={event.truefinals_url} target="_blank"
             className="text-xs bg-orange-500 text-white px-3 py-1.5 rounded font-bold hover:bg-orange-600 transition-colors">
             {isLive ? '🔴 Watch Live' : 'Results'}
           </Link>
         )}
-        {event.livestream_url && (
+        {!isPast && event.livestream_url && (
           <Link href={event.livestream_url} target="_blank"
             className="text-xs border border-orange-500 text-orange-500 px-3 py-1.5 rounded font-bold hover:bg-orange-500/10 transition-colors">
             Stream
