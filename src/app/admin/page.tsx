@@ -24,6 +24,10 @@ export default function AdminPage() {
   const [linksLoading, setLinksLoading] = useState(false)
   const [showAddLink, setShowAddLink] = useState(false)
   const [newLink, setNewLink] = useState({ event_id: '', url: '', label: '', link_type: 'bracket' })
+  const [pastRegSearch, setPastRegSearch] = useState('')
+  const [pastRegEvent, setPastRegEvent] = useState<any>(null)
+  const [pastRegData, setPastRegData] = useState<{ robots: any[], registrations: { resultId: string, robotId: string, wins: number, losses: number, placement: string | null }[] } | null>(null)
+  const [pastRegLoading, setPastRegLoading] = useState(false)
 
   async function fetchPosts(secret: string) {
     try {
@@ -164,6 +168,26 @@ export default function AdminPage() {
       body: JSON.stringify({ action: isRegistered ? 'remove' : 'add', robotId, eventId }),
     })
     fetchRegistrations(password)
+  }
+
+  async function selectPastRegEvent(event: any) {
+    setPastRegEvent(event)
+    setPastRegData(null)
+    setPastRegLoading(true)
+    try {
+      const res = await fetch(`/api/admin/registrations?event_id=${event.id}`, { headers: { authorization: `Bearer ${password}` } })
+      if (res.ok) setPastRegData(await res.json())
+    } finally { setPastRegLoading(false) }
+  }
+
+  async function togglePastRegistration(robotId: string, isRegistered: boolean) {
+    if (!pastRegEvent) return
+    await fetch('/api/admin/registrations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', authorization: `Bearer ${password}` },
+      body: JSON.stringify({ action: isRegistered ? 'remove' : 'add', robotId, eventId: pastRegEvent.id }),
+    })
+    selectPastRegEvent(pastRegEvent)
   }
 
   async function syncOneBot(slug: string) {
@@ -383,6 +407,78 @@ export default function AdminPage() {
                 </div>
               )
             })}
+          </div>
+        )}
+      </section>
+
+      {/* Edit Past Event Registrations */}
+      <section className="mb-10">
+        <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+          <Calendar size={16} className="text-orange-400" /> Edit Past Event Registrations
+        </h2>
+        <div className="relative mb-3">
+          <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+          <input
+            value={pastRegSearch}
+            onChange={e => { setPastRegSearch(e.target.value); setPastRegEvent(null); setPastRegData(null) }}
+            className="w-full bg-[#111] border border-[#333] rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-orange-500"
+            placeholder="Search past events…"
+          />
+        </div>
+        {pastRegSearch.length > 0 && !pastRegEvent && (() => {
+          const todayStr = new Date().toISOString().slice(0, 10)
+          const matches = allEvents
+            .filter(e => (e.start_date?.slice(0, 10) ?? '') < todayStr && e.title.toLowerCase().includes(pastRegSearch.toLowerCase()))
+            .slice(0, 8)
+          if (!matches.length) return <p className="text-gray-500 text-sm">No past events found.</p>
+          return (
+            <div className="flex flex-col gap-1 border border-[#2a2a2a] rounded-lg overflow-hidden mb-3">
+              {matches.map(e => (
+                <button key={e.id} onClick={() => { setPastRegSearch(e.title); selectPastRegEvent(e) }}
+                  className="text-left px-3 py-2 text-sm hover:bg-[#1a1a1a] transition-colors flex items-center justify-between">
+                  <span>{e.title}</span>
+                  <span className="text-xs text-gray-500">{e.start_date?.slice(0, 10)}</span>
+                </button>
+              ))}
+            </div>
+          )
+        })()}
+        {pastRegEvent && (
+          <div className="card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="font-semibold text-sm">{pastRegEvent.title}</p>
+                <p className="text-xs text-gray-500">{pastRegEvent.start_date?.slice(0, 10)}</p>
+              </div>
+              <button onClick={() => { setPastRegEvent(null); setPastRegData(null); setPastRegSearch('') }}
+                className="text-xs text-gray-500 hover:text-gray-300">Clear</button>
+            </div>
+            {pastRegLoading && <p className="text-gray-500 text-sm">Loading…</p>}
+            {!pastRegLoading && pastRegData && (
+              <div className="flex flex-wrap gap-2">
+                {pastRegData.robots.map((robot: any) => {
+                  const reg = pastRegData.registrations.find(r => r.robotId === robot.id)
+                  const isReg = !!reg
+                  const hasResults = reg && (reg.wins > 0 || reg.losses > 0 || reg.placement !== null)
+                  return (
+                    <button key={robot.id}
+                      onClick={() => !hasResults && togglePastRegistration(robot.id, isReg)}
+                      disabled={!!hasResults}
+                      title={hasResults ? 'Has recorded results — edit via sync' : undefined}
+                      className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                        hasResults
+                          ? 'bg-orange-500/20 border-orange-500 text-orange-400 opacity-50 cursor-not-allowed'
+                          : isReg
+                          ? 'bg-orange-500/20 border-orange-500 text-orange-400 hover:bg-red-500/20 hover:border-red-500 hover:text-red-400'
+                          : 'bg-[#1a1a1a] border-[#2a2a2a] text-gray-500 hover:border-orange-500 hover:text-orange-400'
+                      }`}>
+                      {isReg ? (hasResults ? <Cpu size={9} /> : <Trash2 size={9} />) : <Plus size={9} />}
+                      {robot.name}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
       </section>

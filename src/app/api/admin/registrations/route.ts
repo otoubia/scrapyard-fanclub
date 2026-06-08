@@ -7,10 +7,31 @@ function checkAuth(req: NextRequest) {
   return auth === `Bearer ${process.env.ADMIN_SECRET}`
 }
 
-// GET: return upcoming events with their registered bots
+// GET: return upcoming events with their registered bots, or a single event's registrations
 export async function GET(req: NextRequest) {
   if (!checkAuth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const supabase = await createServiceClient()
+  const { searchParams } = new URL(req.url)
+  const eventId = searchParams.get('event_id')
+
+  if (eventId) {
+    const [robotsRes, resultsRes] = await Promise.all([
+      supabase.from('robots').select('id, name, slug').eq('active', true).order('name'),
+      supabase.from('robot_results')
+        .select('id, robot_id, wins, losses, placement')
+        .eq('event_id', eventId),
+    ])
+    return NextResponse.json({
+      robots: robotsRes.data ?? [],
+      registrations: (resultsRes.data ?? []).map(r => ({
+        resultId: r.id,
+        robotId: r.robot_id,
+        wins: r.wins,
+        losses: r.losses,
+        placement: r.placement,
+      })),
+    })
+  }
 
   const nowIso = new Date().toISOString()
   const [eventsRes, robotsRes, resultsRes] = await Promise.all([
@@ -25,7 +46,6 @@ export async function GET(req: NextRequest) {
   const robots = robotsRes.data ?? []
   const results = resultsRes.data ?? []
 
-  // Build a set of registered robot_ids per event
   const registrations: Record<string, { resultId: string, robotId: string }[]> = {}
   for (const r of results) {
     if (!registrations[r.event_id]) registrations[r.event_id] = []
