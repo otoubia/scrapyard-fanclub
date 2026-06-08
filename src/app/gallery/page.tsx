@@ -21,7 +21,9 @@ export const revalidate = 300
 
 function MediaCard({ item }: { item: any }) {
   const isYt = item.url?.includes('youtube') || item.url?.includes('youtu.be')
-  const ytId = isYt ? item.url?.match(/(?:v=|youtu\.be\/)([^&\s]+)/)?.[1] : null
+  const ytIdMatch = isYt ? item.url?.match(/(?:v=|youtu\.be\/)([^&\s?]+)/) : null
+  const ytId = ytIdMatch?.[1] ?? null
+  const ytStart = isYt ? item.url?.match(/[?&]t=(\d+)/)?.[1] : null
   const isDirectFile = /\.(mp4|webm|ogg|mov)(\?|$)/i.test(item.url ?? '')
   const bots = item.media_robot_tags?.map((t: any) => t.robot?.name).filter(Boolean) ?? []
 
@@ -46,7 +48,7 @@ function MediaCard({ item }: { item: any }) {
     <div className="card overflow-hidden flex flex-col">
       <div className="aspect-video bg-[#1a1a1a] overflow-hidden">
         {item.type === 'video' && isYt && ytId
-          ? <iframe src={`https://www.youtube.com/embed/${ytId}`} className="w-full h-full" allowFullScreen title={item.title ?? ''} />
+          ? <iframe src={`https://www.youtube.com/embed/${ytId}${ytStart ? `?start=${ytStart}` : ''}`} className="w-full h-full" allowFullScreen title={item.title ?? ''} />
           : item.type === 'video'
           ? <video src={item.url} controls className="w-full h-full" />
           : <img src={item.url} alt={item.title ?? 'Media'} className="w-full h-full object-cover" />

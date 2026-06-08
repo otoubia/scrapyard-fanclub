@@ -22,11 +22,18 @@ function MediaCard({ item }: { item: any }) {
     const isYt = item.url.includes('youtube') || item.url.includes('youtu.be')
     const isDirectFile = /\.(mp4|webm|ogg|mov)(\?|$)/i.test(item.url)
     if (isYt) {
-      const embedUrl = item.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')
+      const idMatch = item.url.match(/(?:v=|youtu\.be\/)([^&\s?]+)/)
+      const tMatch = item.url.match(/[?&]t=(\d+)/)
+      const embedUrl = idMatch
+        ? `https://www.youtube.com/embed/${idMatch[1]}${tMatch ? `?start=${tMatch[1]}` : ''}`
+        : null
       return (
         <div className="card overflow-hidden">
           <div className="aspect-video bg-[#1a1a1a]">
-            <iframe src={embedUrl} className="w-full h-full" allowFullScreen title={item.title} />
+            {embedUrl
+              ? <iframe src={embedUrl} className="w-full h-full" allowFullScreen title={item.title} />
+              : <a href={item.url} target="_blank" rel="noopener noreferrer" className="w-full h-full flex items-center justify-center"><Video size={40} className="text-orange-500/40" /></a>
+            }
           </div>
           {item.title && <p className="p-3 text-sm font-semibold">{item.title}</p>}
         </div>
