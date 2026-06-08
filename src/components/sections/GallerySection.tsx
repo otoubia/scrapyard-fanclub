@@ -22,21 +22,19 @@ function MediaCard({ item }: { item: any }) {
     const isYt = item.url.includes('youtube') || item.url.includes('youtu.be')
     const isDirectFile = /\.(mp4|webm|ogg|mov)(\?|$)/i.test(item.url)
     if (isYt) {
-      const idMatch = item.url.match(/(?:v=|youtu\.be\/)([^&\s?]+)/)
-      const tMatch = item.url.match(/[?&]t=(\d+)/)
-      const embedUrl = idMatch
-        ? `https://www.youtube.com/embed/${idMatch[1]}${tMatch ? `?start=${tMatch[1]}` : ''}`
-        : null
+      const ytId = item.url.match(/(?:v=|youtu\.be\/)([^&\s?]+)/)?.[1]
       return (
-        <div className="card overflow-hidden">
-          <div className="aspect-video bg-[#1a1a1a]">
-            {embedUrl
-              ? <iframe src={embedUrl} className="w-full h-full" allowFullScreen title={item.title} />
-              : <a href={item.url} target="_blank" rel="noopener noreferrer" className="w-full h-full flex items-center justify-center"><Video size={40} className="text-orange-500/40" /></a>
-            }
+        <a href={item.url} target="_blank" rel="noopener noreferrer" className="card overflow-hidden block hover:border-orange-500 transition-colors">
+          <div className="aspect-video bg-[#1a1a1a] relative">
+            {ytId && <img src={`https://img.youtube.com/vi/${ytId}/mqdefault.jpg`} alt={item.title ?? ''} className="w-full h-full object-cover" />}
+            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+              <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center shadow-lg">
+                <div className="w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-l-[14px] border-l-white ml-1" />
+              </div>
+            </div>
           </div>
           {item.title && <p className="p-3 text-sm font-semibold">{item.title}</p>}
-        </div>
+        </a>
       )
     }
     if (isDirectFile) {
