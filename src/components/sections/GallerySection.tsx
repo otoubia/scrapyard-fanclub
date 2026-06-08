@@ -20,17 +20,36 @@ const TABS = ['all', 'video', 'photo'] as const
 function MediaCard({ item }: { item: any }) {
   if (item.type === 'video') {
     const isYt = item.url.includes('youtube') || item.url.includes('youtu.be')
-    const embedUrl = isYt ? item.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/') : item.url
+    const isDirectFile = /\.(mp4|webm|ogg|mov)(\?|$)/i.test(item.url)
+    if (isYt) {
+      const embedUrl = item.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')
+      return (
+        <div className="card overflow-hidden">
+          <div className="aspect-video bg-[#1a1a1a]">
+            <iframe src={embedUrl} className="w-full h-full" allowFullScreen title={item.title} />
+          </div>
+          {item.title && <p className="p-3 text-sm font-semibold">{item.title}</p>}
+        </div>
+      )
+    }
+    if (isDirectFile) {
+      return (
+        <div className="card overflow-hidden">
+          <div className="aspect-video bg-[#1a1a1a]">
+            <video src={item.url} controls className="w-full h-full" />
+          </div>
+          {item.title && <p className="p-3 text-sm font-semibold">{item.title}</p>}
+        </div>
+      )
+    }
+    // External video page (BrettZone, etc.) — link card
     return (
-      <div className="card overflow-hidden">
-        <div className="aspect-video bg-[#1a1a1a]">
-          {isYt
-            ? <iframe src={embedUrl} className="w-full h-full" allowFullScreen title={item.title} />
-            : <video src={item.url} controls className="w-full h-full" />
-          }
+      <a href={item.url} target="_blank" rel="noopener noreferrer" className="card overflow-hidden block hover:border-orange-500 transition-colors">
+        <div className="aspect-video bg-[#1a1a1a] flex items-center justify-center">
+          <Video size={40} className="text-orange-500/40" />
         </div>
         {item.title && <p className="p-3 text-sm font-semibold">{item.title}</p>}
-      </div>
+      </a>
     )
   }
   if (item.type === 'cad') {

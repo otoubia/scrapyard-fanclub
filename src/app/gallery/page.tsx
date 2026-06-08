@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { ArrowLeft, Image as ImageIcon, Camera, Calendar, MapPin } from 'lucide-react'
+import { ArrowLeft, Image as ImageIcon, Camera, Calendar, MapPin, Video } from 'lucide-react'
 import { formatDateShort } from '@/lib/utils'
 
 // Extract "City, ST" from a full address string
@@ -22,7 +22,25 @@ export const revalidate = 300
 function MediaCard({ item }: { item: any }) {
   const isYt = item.url?.includes('youtube') || item.url?.includes('youtu.be')
   const ytId = isYt ? item.url?.match(/(?:v=|youtu\.be\/)([^&\s]+)/)?.[1] : null
+  const isDirectFile = /\.(mp4|webm|ogg|mov)(\?|$)/i.test(item.url ?? '')
   const bots = item.media_robot_tags?.map((t: any) => t.robot?.name).filter(Boolean) ?? []
+
+  const isExternalVideoLink = item.type === 'video' && !isYt && !isDirectFile
+
+  if (isExternalVideoLink) {
+    return (
+      <a href={item.url} target="_blank" rel="noopener noreferrer" className="card overflow-hidden flex flex-col hover:border-orange-500 transition-colors">
+        <div className="aspect-video bg-[#1a1a1a] overflow-hidden flex items-center justify-center">
+          <Video size={40} className="text-orange-500/40" />
+        </div>
+        <div className="p-3 flex-1">
+          {item.title && <p className="text-sm font-semibold">{item.title}</p>}
+          {item.caption && <p className="text-xs text-gray-400 mt-1">{item.caption}</p>}
+          <p className="text-xs text-orange-500 mt-1">Watch video →</p>
+        </div>
+      </a>
+    )
+  }
 
   return (
     <div className="card overflow-hidden flex flex-col">
