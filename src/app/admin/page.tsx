@@ -28,6 +28,10 @@ export default function AdminPage() {
   const [pastRegEvent, setPastRegEvent] = useState<any>(null)
   const [pastRegData, setPastRegData] = useState<{ robots: any[], registrations: { resultId: string, robotId: string, wins: number, losses: number, placement: string | null }[] } | null>(null)
   const [pastRegLoading, setPastRegLoading] = useState(false)
+  const [showAddBot, setShowAddBot] = useState(false)
+  const [newBot, setNewBot] = useState({ name: '', slug: '', weight_class: '', weapon_type: '', description: '', rce_url: '', image_url: '', active: true })
+  const [addBotLoading, setAddBotLoading] = useState(false)
+  const [addBotError, setAddBotError] = useState<string | null>(null)
 
   async function fetchPosts(secret: string) {
     try {
@@ -226,6 +230,32 @@ export default function AdminPage() {
       const nhrlData = await nhrlRes.json()
       setResultsSummary(`✅ Done! ${totalResults} results, ${totalHighlights} highlights, ${totalFixed} dates fixed | NHRL: ${nhrlData.eventsAdded ?? 0} added, ${nhrlData.resultsAdded ?? 0} results`)
     } finally { setSyncing(false) }
+  }
+
+  function slugify(name: string) {
+    return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  }
+
+  async function addBot() {
+    setAddBotError(null)
+    if (!newBot.name || !newBot.slug || !newBot.weight_class) {
+      setAddBotError('Name, slug, and weight class are required.')
+      return
+    }
+    setAddBotLoading(true)
+    try {
+      const res = await fetch('/api/admin/robots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', authorization: `Bearer ${password}` },
+        body: JSON.stringify(newBot),
+      })
+      const data = await res.json()
+      if (!res.ok) { setAddBotError(data.error ?? 'Failed to add bot'); return }
+      setShowAddBot(false)
+      setNewBot({ name: '', slug: '', weight_class: '', weapon_type: '', description: '', rce_url: '', image_url: '', active: true })
+      const robotsRes = await fetch('/api/admin/robots', { headers: { authorization: `Bearer ${password}` } })
+      if (robotsRes.ok) setRobots(await robotsRes.json())
+    } finally { setAddBotLoading(false) }
   }
 
   if (!authed) {
@@ -479,6 +509,75 @@ export default function AdminPage() {
                 })}
               </div>
             )}
+          </div>
+        )}
+      </section>
+
+      {/* Add Bot */}
+      <section className="mb-10">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <Cpu size={16} className="text-green-400" /> Bots
+          </h2>
+          <button onClick={() => { setShowAddBot(v => !v); setAddBotError(null) }}
+            className="flex items-center gap-1.5 text-xs border border-[#2a2a2a] text-gray-300 hover:border-green-500 hover:text-green-400 px-3 py-1.5 rounded-lg transition-colors">
+            <Plus size={11} /> Add Bot
+          </button>
+        </div>
+
+        {showAddBot && (
+          <div className="card p-4 mb-4 flex flex-col gap-3">
+            <p className="text-xs font-bold text-gray-300">New Bot</p>
+            {addBotError && <p className="text-xs text-red-400">{addBotError}</p>}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input value={newBot.name}
+                onChange={e => { const n = e.target.value; setNewBot(p => ({ ...p, name: n, slug: slugify(n) })) }}
+                className="bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500"
+                placeholder="Name *" />
+              <input value={newBot.slug}
+                onChange={e => setNewBot(p => ({ ...p, slug: e.target.value }))}
+                className="bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500"
+                placeholder="Slug * (auto-filled)" />
+              <select value={newBot.weight_class}
+                onChange={e => setNewBot(p => ({ ...p, weight_class: e.target.value }))}
+                className="bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500">
+                <option value="">Weight class *</option>
+                <option value="150g Fairyweight">150g Fairyweight</option>
+                <option value="1lb Antweight">1lb Antweight</option>
+                <option value="1lb Plastic Antweight">1lb Plastic Antweight</option>
+                <option value="3lb Beetleweight">3lb Beetleweight</option>
+                <option value="12lb Hobbyweight">12lb Hobbyweight</option>
+                <option value="30lb Featherweight">30lb Featherweight</option>
+              </select>
+              <input value={newBot.weapon_type}
+                onChange={e => setNewBot(p => ({ ...p, weapon_type: e.target.value }))}
+                className="bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500"
+                placeholder="Weapon type (e.g. Spinner)" />
+              <input value={newBot.rce_url}
+                onChange={e => setNewBot(p => ({ ...p, rce_url: e.target.value }))}
+                className="bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500 col-span-2"
+                placeholder="RobotCombatEvents URL (for results sync)" />
+              <input value={newBot.image_url}
+                onChange={e => setNewBot(p => ({ ...p, image_url: e.target.value }))}
+                className="bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500 col-span-2"
+                placeholder="Image URL (optional)" />
+              <textarea value={newBot.description}
+                onChange={e => setNewBot(p => ({ ...p, description: e.target.value }))}
+                className="bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500 resize-none col-span-2"
+                rows={2} placeholder="Description (optional)" />
+              <label className="flex items-center gap-2 text-xs text-gray-300 col-span-2">
+                <input type="checkbox" checked={newBot.active} onChange={e => setNewBot(p => ({ ...p, active: e.target.checked }))}
+                  className="accent-green-500" />
+                Active (show on site)
+              </label>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={addBot} disabled={addBotLoading}
+                className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded font-bold disabled:opacity-50">
+                {addBotLoading ? 'Saving…' : 'Save Bot'}
+              </button>
+              <button onClick={() => { setShowAddBot(false); setAddBotError(null) }} className="text-xs text-gray-500 hover:text-gray-300 px-2">Cancel</button>
+            </div>
           </div>
         )}
       </section>
