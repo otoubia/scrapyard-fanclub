@@ -30,6 +30,7 @@ function MediaCard({ item }: { item: any }) {
   if (isVideoLink) {
     return (
       <a href={item.url} target="_blank" rel="noopener noreferrer" className="card overflow-hidden flex flex-col hover:border-orange-500 transition-colors">
+        <p className="text-xs text-red-400 p-1">DBG tags:{item.media_robot_tags?.length ?? 'undef'} bots:{bots.length}</p>
         <div className="aspect-video bg-[#1a1a1a] overflow-hidden relative flex items-center justify-center">
           {isYt && ytId
             ? <>
