@@ -21,7 +21,7 @@ function parseHistoryTable(html: string): TableRow[] {
   let trMatch
   while ((trMatch = trRegex.exec(html)) !== null) {
     const rowHtml = trMatch[1]
-    const eventLinkMatch = rowHtml.match(/href="\/events\/(\d+)"[^>]*>([\s\S]*?)<\/a>/)
+    const eventLinkMatch = rowHtml.match(/href="\/events\/(\d+)[^"]*"[^>]*>([\s\S]*?)<\/a>/)
     if (!eventLinkMatch) continue
     const rceEventId = eventLinkMatch[1]
     const eventName = eventLinkMatch[2].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
