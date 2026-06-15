@@ -211,7 +211,8 @@ export async function GET(req: NextRequest) {
         // Upsert event — canonical rce events are managed by sync-events, don't modify them
         let eventId: string | null = existingEvent?.id ?? null
         if (existingEvent?._canonical) {
-          // Just use the existing canonical event ID; no update needed
+          // Don't modify title/dates/location (managed by sync-events), but keep status current
+          await supabase.from('events').update({ status, updated_at: new Date().toISOString() }).eq('id', eventId)
         } else if (existingEvent) {
           if (!alreadySettled) {
             await supabase.from('events').update({
