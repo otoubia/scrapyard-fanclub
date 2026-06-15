@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { ArrowLeft, Image as ImageIcon, Camera, Calendar, MapPin, Video } from 'lucide-react'
 import { formatDateShort } from '@/lib/utils'
@@ -127,7 +127,8 @@ export default async function GalleryPage({
   async function attachTags(items: any[]): Promise<any[]> {
     if (!items.length) return items
     const ids = items.map((m: any) => m.id)
-    const { data: tagsData } = await supabase
+    const svc = await createServiceClient()
+    const { data: tagsData } = await svc
       .from('media_robot_tags')
       .select('media_id, robot:robots(id,name,slug)')
       .in('media_id', ids)
