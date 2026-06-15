@@ -131,17 +131,34 @@ export async function GET(req: NextRequest) {
       }
       debug[robot.slug] = { rowsPerYear, totalRows: allRows.length }
 
-      // Load all existing events and results for this robot in one query
+      // Load all existing events and results for this robot in one query.
+      // Check both rce_robot events and canonical rce events (synced from events.json).
       const externalIds = allRows.map(r => `rce-event:${r.rceEventId}`)
-      const { data: existingEvents } = await supabase
-        .from('events')
-        .select('id, external_id, start_date, location')
-        .eq('event_source', 'rce_robot')
-        .in('external_id', externalIds)
+      const rawRceIds = allRows.map(r => r.rceEventId)
 
-      const existingEventMap = new Map(existingEvents?.map(e => [e.external_id, e]) ?? [])
+      const [{ data: existingRceRobotEvents }, { data: existingRceEvents }] = await Promise.all([
+        supabase
+          .from('events')
+          .select('id, external_id, start_date, location')
+          .eq('event_source', 'rce_robot')
+          .in('external_id', externalIds),
+        supabase
+          .from('events')
+          .select('id, external_id, start_date, location')
+          .eq('event_source', 'rce')
+          .in('external_id', rawRceIds),
+      ])
 
-      const existingEventIds = existingEvents?.map(e => e.id) ?? []
+      // Build map keyed by 'rce-event:<id>'; canonical rce events take precedence
+      const existingEventMap = new Map<string, any>()
+      for (const e of existingRceRobotEvents ?? []) {
+        existingEventMap.set(e.external_id, e)
+      }
+      for (const e of existingRceEvents ?? []) {
+        existingEventMap.set(`rce-event:${e.external_id}`, { ...e, _canonical: true })
+      }
+
+      const existingEventIds = [...existingEventMap.values()].map(e => e.id)
       const { data: existingResults } = existingEventIds.length
         ? await supabase
             .from('robot_results')
@@ -152,9 +169,11 @@ export async function GET(req: NextRequest) {
 
       const existingResultMap = new Map(existingResults?.map(r => [r.event_id, r]) ?? [])
 
-      // Determine which events need a fresh page fetch, then do them ALL in parallel
+      // Determine which events need a fresh page fetch, then do them ALL in parallel.
+      // Skip canonical rce events — their dates are already managed by sync-events.
       const rowsNeedingFetch = allRows.filter(row => {
         const existingEvent = existingEventMap.get(`rce-event:${row.rceEventId}`)
+        if (existingEvent?._canonical) return false
         const existingResult = existingEvent ? existingResultMap.get(existingEvent.id) : null
         const alreadySettled = existingEvent?.start_date &&
           !existingEvent.start_date.startsWith('2020') &&
@@ -189,9 +208,11 @@ export async function GET(req: NextRequest) {
         // Always derive status from actual date
         const status = startDate && !startDate.startsWith('2020') && new Date(startDate) > new Date() ? 'upcoming' : 'past'
 
-        // Upsert event
+        // Upsert event — canonical rce events are managed by sync-events, don't modify them
         let eventId: string | null = existingEvent?.id ?? null
-        if (existingEvent) {
+        if (existingEvent?._canonical) {
+          // Just use the existing canonical event ID; no update needed
+        } else if (existingEvent) {
           if (!alreadySettled) {
             await supabase.from('events').update({
               title: row.eventName,
