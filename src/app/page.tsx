@@ -48,7 +48,12 @@ export default async function HomePage() {
       competitorMap[r.event_id].push(r.robot)
     }
 
-    const allEvents = [...(pastEventsData ?? []), ...(nonPastEventsRes.data ?? [])]
+    const seenIds = new Set<string>()
+    const allEvents = [...(pastEventsData ?? []), ...(nonPastEventsRes.data ?? [])].filter(e => {
+      if (seenIds.has(e.id)) return false
+      seenIds.add(e.id)
+      return true
+    })
     events = allEvents.map((e: any) => ({ ...e, competitors: competitorMap[e.id] ?? [], hasMedia: eventIdsWithMedia.has(e.id) }))
   } catch {
     // Supabase not yet configured — placeholder UI shown
@@ -59,12 +64,11 @@ export default async function HomePage() {
     eventIdsWithResults.has(e.id) && new Date(e.start_date || 0) < todayMidnight
   )
 
-  // Upcoming: future events (status-based), excluding today
+  // Upcoming: any future event in the DB, excluding today
   const upcomingEventsBase = events
-    .filter(e => (e.status === 'upcoming' || e.status === 'current') &&
+    .filter(e =>
       e.start_date?.slice(0, 10) !== todayStr &&
-      new Date(e.end_date || e.start_date) >= todayMidnight &&
-      !eventIdsWithResults.has(e.id))
+      new Date(e.end_date || e.start_date) >= todayMidnight)
     .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
 
   // Live events: status=current OR start_date=today
