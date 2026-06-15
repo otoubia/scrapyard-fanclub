@@ -11,18 +11,32 @@ export default async function HomePage() {
   let eventIdsWithResults = new Set<string>()
   const todayStr = new Date().toISOString().slice(0, 10)
 
+  const todayMidnight = new Date()
+  todayMidnight.setHours(0, 0, 0, 0)
+
   try {
     const supabase = await createClient()
-    const [pastEventsRes, nonPastEventsRes, highlightsRes, mediaRes, eventMediaRes, robotResultCountsRes, competitorsRes] = await Promise.all([
-      supabase.from('events').select('*, external_id').eq('status', 'past').order('start_date', { ascending: false }).limit(200),
+    // Fetch robot_results event IDs and non-past events in parallel first
+    const [robotResultCountsRes, competitorsRes, nonPastEventsRes, highlightsRes, mediaRes, eventMediaRes] = await Promise.all([
+      supabase.from('robot_results').select('robot_id, event_id'),
+      supabase.from('robot_results').select('event_id, robot:robots(name, slug)'),
       supabase.from('events').select('*, external_id').in('status', ['upcoming', 'current']).order('start_date', { ascending: true }),
       supabase.from('highlights').select('*, robot:robots(*), event:events(*)').order('created_at', { ascending: false }),
       supabase.from('media').select('*, event:events(id,title,start_date,location), media_robot_tags(robot:robots(id,name,slug))').eq('approved', true).order('created_at', { ascending: false }).limit(12),
       supabase.from('media').select('event_id').eq('approved', true).not('event_id', 'is', null),
-      supabase.from('robot_results').select('robot_id, event_id'),
-      supabase.from('robot_results').select('event_id, robot:robots(name, slug)'),
     ])
-    events = [...(pastEventsRes.data ?? []), ...(nonPastEventsRes.data ?? [])]
+
+    eventIdsWithResults = new Set([
+      ...robotResultCountsRes.data?.map((r: any) => r.event_id) ?? [],
+      ...competitorsRes.data?.map((r: any) => r.event_id) ?? [],
+    ])
+
+    // Fetch past events directly by robot_result IDs — avoids depending on the status field being accurate
+    const resultEventIds = [...eventIdsWithResults]
+    const { data: pastEventsData } = resultEventIds.length > 0
+      ? await supabase.from('events').select('*, external_id').in('id', resultEventIds).order('start_date', { ascending: false })
+      : { data: [] }
+
     highlights = (highlightsRes.data ?? []).sort((a: any, b: any) =>
       new Date(b.event?.start_date ?? 0).getTime() - new Date(a.event?.start_date ?? 0).getTime()
     )
@@ -33,27 +47,24 @@ export default async function HomePage() {
       if (!competitorMap[r.event_id]) competitorMap[r.event_id] = []
       competitorMap[r.event_id].push(r.robot)
     }
-    eventIdsWithResults = new Set([
-      ...robotResultCountsRes.data?.map((r: any) => r.event_id) ?? [],
-      ...competitorsRes.data?.map((r: any) => r.event_id) ?? [],
-    ])
-    events = events.map((e: any) => ({ ...e, competitors: competitorMap[e.id] ?? [], hasMedia: eventIdsWithMedia.has(e.id) }))
+
+    const allEvents = [...(pastEventsData ?? []), ...(nonPastEventsRes.data ?? [])]
+    events = allEvents.map((e: any) => ({ ...e, competitors: competitorMap[e.id] ?? [], hasMedia: eventIdsWithMedia.has(e.id) }))
   } catch {
     // Supabase not yet configured — placeholder UI shown
   }
 
-  // Only show past events where at least one team bot competed
-  const pastEventsBase = eventIdsWithResults.size > 0
-    ? events.filter(e => e.status === 'past' && eventIdsWithResults.has(e.id))
-    : events.filter(e => e.status === 'past')
+  // Past: any event that has robot_results and whose start_date is before today
+  const pastEventsBase = events.filter(e =>
+    eventIdsWithResults.has(e.id) && new Date(e.start_date || 0) < todayMidnight
+  )
 
-  // Upcoming: exclude today's events so they appear under Live instead
-  const todayMidnight = new Date()
-  todayMidnight.setHours(0, 0, 0, 0)
+  // Upcoming: future events (status-based), excluding today
   const upcomingEventsBase = events
-    .filter(e => e.status === 'upcoming' &&
+    .filter(e => (e.status === 'upcoming' || e.status === 'current') &&
       e.start_date?.slice(0, 10) !== todayStr &&
-      new Date(e.end_date || e.start_date) >= todayMidnight)
+      new Date(e.end_date || e.start_date) >= todayMidnight &&
+      !eventIdsWithResults.has(e.id))
     .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
 
   // Live events: status=current OR start_date=today
