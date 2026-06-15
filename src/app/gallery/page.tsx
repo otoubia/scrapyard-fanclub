@@ -23,53 +23,18 @@ function MediaCard({ item }: { item: any }) {
   const isYt = item.url?.includes('youtube') || item.url?.includes('youtu.be')
   const ytId = isYt ? item.url?.match(/(?:v=|youtu\.be\/)([^&\s?]+)/)?.[1] ?? null : null
   const isDirectFile = /\.(mp4|webm|ogg|mov)(\?|$)/i.test(item.url ?? '')
+  const bots = item.media_robot_tags?.map((t: any) => t.robot?.name).filter(Boolean) ?? []
 
-  const robotTags = item.media_robot_tags?.map((t: any) => t.robot).filter(Boolean) ?? []
   const isVideoLink = item.type === 'video' && (isYt || (!isDirectFile))
-
-  const tagRow = (
-    <div className="flex flex-wrap gap-1 mt-2 relative z-10">
-      {robotTags.map((r: any) => (
-        <Link key={r.id} href={`/robots/${r.slug}`}
-          className="text-xs bg-orange-500/10 text-orange-400 px-1.5 py-0.5 rounded-full hover:bg-orange-500/20 transition-colors">
-          {r.name}
-        </Link>
-      ))}
-      {item.event?.id && item.event?.title && (
-        <Link href={`/gallery?event_id=${item.event.id}`}
-          className="text-xs bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded-full hover:bg-blue-500/20 transition-colors">
-          {item.event.title}
-        </Link>
-      )}
-    </div>
-  )
-
-  const metaBlock = item.event && (
-    <div className="mt-2 flex flex-col gap-0.5">
-      {item.event.start_date && !item.event.start_date.startsWith('2020') && (
-        <span className="text-xs text-gray-500 flex items-center gap-1">
-          <Calendar size={10} /> {formatDateShort(item.event.start_date)}
-        </span>
-      )}
-      {cityState(item.event.location) && (
-        <span className="text-xs text-gray-500 flex items-center gap-1">
-          <MapPin size={10} /> {cityState(item.event.location)}
-        </span>
-      )}
-    </div>
-  )
 
   if (isVideoLink) {
     return (
-      <div className="card overflow-hidden flex flex-col hover:border-orange-500 transition-colors relative">
-        {/* invisible full-card link — sits behind the tag links */}
-        <a href={item.url} target="_blank" rel="noopener noreferrer"
-           className="absolute inset-0 z-0" aria-label={item.title ?? 'Watch video'} />
+      <a href={item.url} target="_blank" rel="noopener noreferrer" className="card overflow-hidden flex flex-col hover:border-orange-500 transition-colors">
         <div className="aspect-video bg-[#1a1a1a] overflow-hidden relative flex items-center justify-center">
           {isYt && ytId
             ? <>
                 <img src={`https://img.youtube.com/vi/${ytId}/mqdefault.jpg`} alt={item.title ?? ''} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20">
                   <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center shadow-lg">
                     <div className="w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-l-[14px] border-l-white ml-1" />
                   </div>
@@ -78,13 +43,33 @@ function MediaCard({ item }: { item: any }) {
             : <Video size={40} className="text-orange-500/40" />
           }
         </div>
-        <div className="p-3 flex-1 relative">
+        <div className="p-3 flex-1">
           {item.title && <p className="text-sm font-semibold">{item.title}</p>}
           {item.caption && <p className="text-xs text-gray-400 mt-1">{item.caption}</p>}
-          {tagRow}
-          {metaBlock}
+          <div className="flex flex-wrap gap-1 mt-2">
+            {bots.map((b: string) => (
+              <span key={b} className="text-xs bg-orange-500/10 text-orange-400 px-1.5 py-0.5 rounded-full">{b}</span>
+            ))}
+            {item.event?.title && (
+              <span className="text-xs bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded-full">{item.event.title}</span>
+            )}
+          </div>
+          {item.event && (
+            <div className="mt-2 flex flex-col gap-0.5">
+              {item.event.start_date && !item.event.start_date.startsWith('2020') && (
+                <span className="text-xs text-gray-500 flex items-center gap-1">
+                  <Calendar size={10} /> {formatDateShort(item.event.start_date)}
+                </span>
+              )}
+              {cityState(item.event.location) && (
+                <span className="text-xs text-gray-500 flex items-center gap-1">
+                  <MapPin size={10} /> {cityState(item.event.location)}
+                </span>
+              )}
+            </div>
+          )}
         </div>
-      </div>
+      </a>
     )
   }
 
@@ -99,8 +84,28 @@ function MediaCard({ item }: { item: any }) {
       <div className="p-3 flex-1">
         {item.title && <p className="text-sm font-semibold">{item.title}</p>}
         {item.caption && <p className="text-xs text-gray-400 mt-1">{item.caption}</p>}
-        {tagRow}
-        {metaBlock}
+        <div className="flex flex-wrap gap-1 mt-2">
+          {bots.map((b: string) => (
+            <span key={b} className="text-xs bg-orange-500/10 text-orange-400 px-1.5 py-0.5 rounded-full">{b}</span>
+          ))}
+          {item.event?.title && (
+            <span className="text-xs bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded-full">{item.event.title}</span>
+          )}
+        </div>
+        {item.event && (
+          <div className="mt-2 flex flex-col gap-0.5">
+            {item.event.start_date && !item.event.start_date.startsWith('2020') && (
+              <span className="text-xs text-gray-500 flex items-center gap-1">
+                <Calendar size={10} /> {formatDateShort(item.event.start_date)}
+              </span>
+            )}
+            {cityState(item.event.location) && (
+              <span className="text-xs text-gray-500 flex items-center gap-1">
+                <MapPin size={10} /> {cityState(item.event.location)}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
