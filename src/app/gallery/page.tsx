@@ -19,33 +19,6 @@ function cityState(location: string | null): string | null {
 
 export const revalidate = 0
 
-async function mergeTagsIntoMedia(items: any[]): Promise<any[]> {
-  if (!items.length) return items
-  const supabase = await createClient()
-  const ids = items.map((m: any) => m.id)
-
-  const { data: tagRows } = await supabase
-    .from('media_robot_tags')
-    .select('media_id, robot_id')
-    .in('media_id', ids)
-
-  if (!tagRows?.length) return items.map((m: any) => ({ ...m, media_robot_tags: [] }))
-
-  const robotIds = [...new Set(tagRows.map((t: any) => t.robot_id as string))]
-  const { data: robots } = await supabase
-    .from('robots')
-    .select('id, name, slug')
-    .in('id', robotIds)
-
-  const robotMap = new Map((robots ?? []).map((r: any) => [r.id, r]))
-  const byId: Record<string, any[]> = {}
-  for (const t of tagRows) {
-    if (!byId[t.media_id]) byId[t.media_id] = []
-    byId[t.media_id].push({ robot: robotMap.get(t.robot_id) ?? null })
-  }
-  return items.map((m: any) => ({ ...m, media_robot_tags: byId[m.id] ?? [] }))
-}
-
 function MediaCard({ item }: { item: any }) {
   const isYt = item.url?.includes('youtube') || item.url?.includes('youtu.be')
   const ytId = isYt ? item.url?.match(/(?:v=|youtu\.be\/)([^&\s?]+)/)?.[1] ?? null : null
@@ -151,6 +124,24 @@ export default async function GalleryPage({
   let backHref = '/'
   let backLabel = 'Home'
 
+  async function loadTags(items: any[]) {
+    if (!items.length) return items
+    const ids = items.map((m: any) => m.id as string)
+    const { data: tagRows } = await supabase
+      .from('media_robot_tags').select('media_id, robot_id').in('media_id', ids)
+    if (!tagRows?.length) return items.map((m: any) => ({ ...m, media_robot_tags: [] }))
+    const robotIds = [...new Set(tagRows.map((t: any) => t.robot_id as string))]
+    const { data: robotRows } = await supabase
+      .from('robots').select('id, name, slug').in('id', robotIds)
+    const rMap = new Map((robotRows ?? []).map((r: any) => [r.id, r]))
+    const byId: Record<string, any[]> = {}
+    for (const t of tagRows) {
+      if (!byId[t.media_id]) byId[t.media_id] = []
+      byId[t.media_id].push({ robot: rMap.get(t.robot_id) ?? null })
+    }
+    return items.map((m: any) => ({ ...m, media_robot_tags: byId[m.id] ?? [] }))
+  }
+
   if (event_id) {
     // Gallery for a specific event
     const [mediaRes, eventRes] = await Promise.all([
@@ -161,7 +152,7 @@ export default async function GalleryPage({
         .order('created_at', { ascending: false }),
       supabase.from('events').select('title').eq('id', event_id).single(),
     ])
-    media = await mergeTagsIntoMedia(mediaRes.data ?? [])
+    media = await loadTags(mediaRes.data ?? [])
     pageTitle = eventRes.data?.title ?? 'Event Gallery'
     backHref = '/#events'
     backLabel = 'Events'
@@ -190,7 +181,7 @@ export default async function GalleryPage({
       .eq('approved', true)
       .order('created_at', { ascending: false })
       .limit(100)
-    media = await mergeTagsIntoMedia(data ?? [])
+    media = await loadTags(data ?? [])
   }
 
   return (
