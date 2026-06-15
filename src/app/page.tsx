@@ -13,15 +13,16 @@ export default async function HomePage() {
 
   try {
     const supabase = await createClient()
-    const [eventsRes, highlightsRes, mediaRes, eventMediaRes, robotResultCountsRes, competitorsRes] = await Promise.all([
-      supabase.from('events').select('*, external_id').order('start_date', { ascending: false }).limit(100),
+    const [pastEventsRes, nonPastEventsRes, highlightsRes, mediaRes, eventMediaRes, robotResultCountsRes, competitorsRes] = await Promise.all([
+      supabase.from('events').select('*, external_id').eq('status', 'past').order('start_date', { ascending: false }).limit(200),
+      supabase.from('events').select('*, external_id').in('status', ['upcoming', 'current']).order('start_date', { ascending: true }),
       supabase.from('highlights').select('*, robot:robots(*), event:events(*)').order('created_at', { ascending: false }),
       supabase.from('media').select('*, event:events(id,title,start_date,location), media_robot_tags(robot:robots(id,name,slug))').eq('approved', true).order('created_at', { ascending: false }).limit(12),
       supabase.from('media').select('event_id').eq('approved', true).not('event_id', 'is', null),
       supabase.from('robot_results').select('robot_id, event_id'),
       supabase.from('robot_results').select('event_id, robot:robots(name, slug)'),
     ])
-    events = eventsRes.data ?? []
+    events = [...(pastEventsRes.data ?? []), ...(nonPastEventsRes.data ?? [])]
     highlights = (highlightsRes.data ?? []).sort((a: any, b: any) =>
       new Date(b.event?.start_date ?? 0).getTime() - new Date(a.event?.start_date ?? 0).getTime()
     )
