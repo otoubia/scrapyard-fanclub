@@ -76,6 +76,7 @@ function MediaCard({ item }: { item: any }) {
 
   return (
     <div className="card overflow-hidden flex flex-col">
+      <p className="text-xs text-blue-400 p-1">DBG type:{item.type} bots:{bots.length} tags:{item.media_robot_tags?.length ?? 'undef'}</p>
       <div className="aspect-video bg-[#1a1a1a] overflow-hidden">
         {item.type === 'video'
           ? <video src={item.url} controls className="w-full h-full" />
