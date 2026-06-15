@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { Trophy, Star, Zap, Calendar, MapPin } from 'lucide-react'
 import { formatDateShort } from '@/lib/utils'
 
@@ -30,9 +31,15 @@ export default function HighlightsSection({ highlights }: { highlights: any[] })
                 <h3 className="font-bold text-lg">{h.title}</h3>
                 {h.description && <p className="text-sm text-gray-400">{h.description}</p>}
                 <div className="text-xs text-gray-500 flex flex-col gap-1">
-                  {h.robot?.name && <span>🤖 {h.robot.name}</span>}
-                  {h.event?.start_date && !h.event.start_date.startsWith('2020') && (
-                    <span className="flex items-center gap-1"><Calendar size={11} /> {formatDateShort(h.event.start_date)}</span>
+                  {h.robot?.name && (
+                    <Link href={`/robots/${h.robot.slug}`} className="hover:text-orange-400 transition-colors">
+                      🤖 {h.robot.name}
+                    </Link>
+                  )}
+                  {h.event?.id && h.event?.start_date && !h.event.start_date.startsWith('2020') && (
+                    <Link href={`/gallery?event_id=${h.event.id}`} className="flex items-center gap-1 hover:text-orange-400 transition-colors">
+                      <Calendar size={11} /> {formatDateShort(h.event.start_date)}
+                    </Link>
                   )}
                   {h.event?.location && (
                     <span className="flex items-center gap-1"><MapPin size={11} /> {h.event.location}</span>
