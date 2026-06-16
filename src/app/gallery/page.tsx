@@ -124,35 +124,17 @@ export default async function GalleryPage({
   let backHref = '/'
   let backLabel = 'Home'
 
-  async function loadTags(items: any[]) {
-    if (!items.length) return items
-    const ids = items.map((m: any) => m.id as string)
-    const { data: tagRows } = await supabase
-      .from('media_robot_tags').select('media_id, robot_id').in('media_id', ids)
-    if (!tagRows?.length) return items.map((m: any) => ({ ...m, media_robot_tags: [] }))
-    const robotIds = [...new Set(tagRows.map((t: any) => t.robot_id as string))]
-    const { data: robotRows } = await supabase
-      .from('robots').select('id, name, slug').in('id', robotIds)
-    const rMap = new Map((robotRows ?? []).map((r: any) => [r.id, r]))
-    const byId: Record<string, any[]> = {}
-    for (const t of tagRows) {
-      if (!byId[t.media_id]) byId[t.media_id] = []
-      byId[t.media_id].push({ robot: rMap.get(t.robot_id) ?? null })
-    }
-    return items.map((m: any) => ({ ...m, media_robot_tags: byId[m.id] ?? [] }))
-  }
-
   if (event_id) {
     // Gallery for a specific event
     const [mediaRes, eventRes] = await Promise.all([
       supabase.from('media')
-        .select('*, event:events(id,title,start_date,location)')
+        .select('*, event:events(id,title,start_date,location), media_robot_tags(robot:robots(id,name,slug))')
         .eq('approved', true)
         .eq('event_id', event_id)
         .order('created_at', { ascending: false }),
       supabase.from('events').select('title').eq('id', event_id).single(),
     ])
-    media = await loadTags(mediaRes.data ?? [])
+    media = mediaRes.data ?? []
     pageTitle = eventRes.data?.title ?? 'Event Gallery'
     backHref = '/#events'
     backLabel = 'Events'
@@ -177,11 +159,11 @@ export default async function GalleryPage({
     // Full gallery
     const { data } = await supabase
       .from('media')
-      .select('*, event:events(id,title,start_date,location)')
+      .select('*, event:events(id,title,start_date,location), media_robot_tags(robot:robots(id,name,slug))')
       .eq('approved', true)
       .order('created_at', { ascending: false })
       .limit(100)
-    media = await loadTags(data ?? [])
+    media = data ?? []
   }
 
   return (
