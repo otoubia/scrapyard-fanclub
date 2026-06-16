@@ -21,6 +21,16 @@ function MediaCard({ item }: { item: any }) {
   if (item.type === 'video') {
     const isYt = item.url.includes('youtube') || item.url.includes('youtu.be')
     const isDirectFile = /\.(mp4|webm|ogg|mov)(\?|$)/i.test(item.url)
+    const tagSection = (
+      <div className="flex flex-wrap gap-1 mt-1.5">
+        {item.media_robot_tags?.map((t: any) => (
+          <span key={t.robot?.id} className="text-xs bg-orange-500/10 text-orange-400 px-1.5 py-0.5 rounded-full">{t.robot?.name}</span>
+        ))}
+        {item.event?.title && (
+          <span className="text-xs bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded-full">{item.event.title}</span>
+        )}
+      </div>
+    )
     if (isYt) {
       const ytId = item.url.match(/(?:v=|youtu\.be\/)([^&\s?]+)/)?.[1]
       return (
@@ -33,7 +43,10 @@ function MediaCard({ item }: { item: any }) {
               </div>
             </div>
           </div>
-          {item.title && <p className="p-3 text-sm font-semibold">{item.title}</p>}
+          <div className="p-3">
+            {item.title && <p className="text-sm font-semibold">{item.title}</p>}
+            {tagSection}
+          </div>
         </a>
       )
     }
@@ -43,7 +56,10 @@ function MediaCard({ item }: { item: any }) {
           <div className="aspect-video bg-[#1a1a1a]">
             <video src={item.url} controls className="w-full h-full" />
           </div>
-          {item.title && <p className="p-3 text-sm font-semibold">{item.title}</p>}
+          <div className="p-3">
+            {item.title && <p className="text-sm font-semibold">{item.title}</p>}
+            {tagSection}
+          </div>
         </div>
       )
     }
@@ -53,7 +69,10 @@ function MediaCard({ item }: { item: any }) {
         <div className="aspect-video bg-[#1a1a1a] flex items-center justify-center">
           <Video size={40} className="text-orange-500/40" />
         </div>
-        {item.title && <p className="p-3 text-sm font-semibold">{item.title}</p>}
+        <div className="p-3">
+          {item.title && <p className="text-sm font-semibold">{item.title}</p>}
+          {tagSection}
+        </div>
       </a>
     )
   }
