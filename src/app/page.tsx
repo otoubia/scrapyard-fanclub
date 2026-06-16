@@ -4,7 +4,7 @@ import HighlightsSection from '@/components/sections/HighlightsSection'
 import GallerySection from '@/components/sections/GallerySection'
 import HeroSection from '@/components/sections/HeroSection'
 
-export const revalidate = 300
+export const dynamic = 'force-dynamic'
 
 export default async function HomePage() {
   let events: any[] = [], highlights: any[] = [], media: any[] = []
