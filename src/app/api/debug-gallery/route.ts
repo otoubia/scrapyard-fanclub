@@ -6,8 +6,9 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from('media')
-    .select('id, type, title, media_robot_tags(robot:robots(id,name,slug))')
+    .select('*, event:events(id,title,start_date,location), media_robot_tags(robot:robots(id,name,slug))')
     .eq('approved', true)
+    .order('created_at', { ascending: false })
     .limit(10)
 
   const { count } = await supabase
