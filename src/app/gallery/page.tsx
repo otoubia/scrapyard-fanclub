@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { ArrowLeft, Image as ImageIcon, Camera, Calendar, MapPin, Video } from 'lucide-react'
 import { formatDateShort } from '@/lib/utils'
@@ -117,7 +117,7 @@ export default async function GalleryPage({
   searchParams: Promise<{ event_id?: string; robot_id?: string }>
 }) {
   const { event_id, robot_id } = await searchParams
-  const supabase = await createClient()
+  const supabase = await createServiceClient()
 
   let media: any[] = []
   let pageTitle = 'Gallery'
