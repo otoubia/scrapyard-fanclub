@@ -174,7 +174,7 @@ export default async function GalleryPage({
         </Link>
       </div>
       <div className="flex items-center justify-between mb-8">
-        <h1 className="section-title mb-0">{pageTitle} [dbg:{media.reduce((n,m)=>n+(m.media_robot_tags?.length??0),0)}tags]</h1>
+        <h1 className="section-title mb-0">{pageTitle}</h1>
         <Link href={`/submit${event_id ? `?event_id=${event_id}` : robot_id ? `?robot_id=${robot_id}` : ''}`}
           className="flex items-center gap-1.5 text-sm border border-orange-500 text-orange-500 hover:bg-orange-500/10 px-4 py-2 rounded-lg transition-colors font-bold">
           <Camera size={13} /> Share Media

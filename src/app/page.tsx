@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
 import EventsSection from '@/components/sections/EventsSection'
 import HighlightsSection from '@/components/sections/HighlightsSection'
 import GallerySection from '@/components/sections/GallerySection'
@@ -15,7 +15,7 @@ export default async function HomePage() {
   todayMidnight.setHours(0, 0, 0, 0)
 
   try {
-    const supabase = await createClient()
+    const supabase = await createServiceClient()
     // Fetch robot_results event IDs and non-past events in parallel first
     const [robotResultCountsRes, competitorsRes, nonPastEventsRes, highlightsRes, mediaRes, eventMediaRes] = await Promise.all([
       supabase.from('robot_results').select('robot_id, event_id'),
@@ -86,7 +86,7 @@ export default async function HomePage() {
       ...liveEventsBase.map((e: any) => e.id),
     ])]
     if (allIds.length > 0) {
-      const supabase2 = await createClient()
+      const supabase2 = await createServiceClient()
       const { data: linksData } = await supabase2
         .from('event_links')
         .select('event_id, url, label, link_type')
