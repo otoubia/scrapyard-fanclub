@@ -17,7 +17,7 @@ function cityState(location: string | null): string | null {
   return null
 }
 
-export const revalidate = 0
+export const dynamic = 'force-dynamic'
 
 function MediaCard({ item }: { item: any }) {
   const isYt = item.url?.includes('youtube') || item.url?.includes('youtu.be')
@@ -30,7 +30,6 @@ function MediaCard({ item }: { item: any }) {
   if (isVideoLink) {
     return (
       <a href={item.url} target="_blank" rel="noopener noreferrer" className="card overflow-hidden flex flex-col hover:border-orange-500 transition-colors">
-        <p className="text-xs text-red-400 p-1">DBG tags:{item.media_robot_tags?.length ?? 'undef'} bots:{bots.length}</p>
         <div className="aspect-video bg-[#1a1a1a] overflow-hidden relative flex items-center justify-center">
           {isYt && ytId
             ? <>
@@ -76,7 +75,6 @@ function MediaCard({ item }: { item: any }) {
 
   return (
     <div className="card overflow-hidden flex flex-col">
-      <p className="text-xs text-blue-400 p-1">DBG type:{item.type} bots:{bots.length} tags:{item.media_robot_tags?.length ?? 'undef'}</p>
       <div className="aspect-video bg-[#1a1a1a] overflow-hidden">
         {item.type === 'video'
           ? <video src={item.url} controls className="w-full h-full" />
