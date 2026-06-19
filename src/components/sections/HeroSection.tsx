@@ -19,7 +19,7 @@ export default function HeroSection({ currentEvents }: { currentEvents: any[] })
           <Zap className="text-orange-500" size={36} />
         </div>
         <p className="text-gray-400 text-lg md:text-xl max-w-2xl mx-auto mb-8">
-          Fan club for Team Scrap Yard — competitive combat robotics across NHRL and beyond.
+          Fan app for Team Scrap Yard — competitive combat robotics across NHRL, GSCRL and beyond.
         </p>
 
         {liveEvent && (
