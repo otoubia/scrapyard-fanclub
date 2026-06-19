@@ -166,7 +166,7 @@ export default function EventsSection({
             <p className="text-sm mt-1">Check back during event weekends!</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div id="live-events" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {current.map((e: any) => (
               <EventCard key={e.id} event={e} isLive />
             ))}

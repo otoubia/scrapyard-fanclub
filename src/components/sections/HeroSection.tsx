@@ -25,7 +25,7 @@ export default function HeroSection({ currentEvents }: { currentEvents: any[] })
         {liveEvent && (
           <div className="inline-flex items-center gap-3 bg-orange-500/10 border border-orange-500 rounded-xl px-6 py-4 mb-8 live-badge">
             <Radio className="text-orange-500 animate-pulse" size={20} />
-            <span className="font-bold text-orange-400">LIVE NOW: {liveEvent.title}</span>
+            <Link href="#live-events" className="font-bold text-orange-400 hover:text-orange-300 transition-colors">LIVE NOW: {liveEvent.title}</Link>
             {liveEvent.truefinals_url && (
               <Link href={liveEvent.truefinals_url} target="_blank"
                 className="bg-orange-500 text-white font-bold text-sm px-3 py-1 rounded hover:bg-orange-600 transition-colors">
