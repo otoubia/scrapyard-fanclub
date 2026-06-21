@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   const supabase = await createServiceClient()
   const { data } = await supabase
     .from('events')
-    .select('id, title, start_date, status')
+    .select('id, title, start_date, end_date, status')
     .order('start_date', { ascending: false })
     .limit(500)
   return NextResponse.json(data ?? [])

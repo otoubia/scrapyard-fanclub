@@ -59,22 +59,26 @@ export default async function HomePage() {
     // Supabase not yet configured — placeholder UI shown
   }
 
-  // Past: any event that has robot_results and whose start_date is before today
+  // Live: status=current OR today falls within [start_date, end_date]
+  const liveEventsBase = events.filter(e => {
+    if (e.status === 'current') return true
+    const start = e.start_date?.slice(0, 10)
+    const end = (e.end_date || e.start_date)?.slice(0, 10)
+    return start && end && start <= todayStr && end >= todayStr
+  })
+  const liveEventIds = new Set(liveEventsBase.map((e: any) => e.id))
+
+  // Past: has robot_results AND started before today AND not currently live
   const pastEventsBase = events.filter(e =>
-    eventIdsWithResults.has(e.id) && new Date(e.start_date || 0) < todayMidnight
+    eventIdsWithResults.has(e.id) &&
+    new Date(e.start_date || 0) < todayMidnight &&
+    !liveEventIds.has(e.id)
   )
 
-  // Upcoming: any future event in the DB, excluding today
+  // Upcoming: starts in the future (not yet started)
   const upcomingEventsBase = events
-    .filter(e =>
-      e.start_date?.slice(0, 10) !== todayStr &&
-      new Date(e.end_date || e.start_date) >= todayMidnight)
+    .filter(e => (e.start_date?.slice(0, 10) ?? '') > todayStr)
     .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
-
-  // Live events: status=current OR start_date=today
-  const liveEventsBase = events.filter(e =>
-    e.status === 'current' || e.start_date?.slice(0, 10) === todayStr
-  )
 
   // Fetch bracket and stream links for ALL displayed events in one query
   type LinkEntry = { url: string; label: string }
