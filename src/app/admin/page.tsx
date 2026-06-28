@@ -37,6 +37,8 @@ export default function AdminPage() {
   const [addEventLoading, setAddEventLoading] = useState(false)
   const [addEventError, setAddEventError] = useState<string | null>(null)
   const [addEventSuccess, setAddEventSuccess] = useState<string | null>(null)
+  const [eventUrl, setEventUrl] = useState('')
+  const [parsingUrl, setParsingUrl] = useState(false)
   const [showAddBot, setShowAddBot] = useState(false)
   const [newBot, setNewBot] = useState({ name: '', slug: '', weight_class: '', weapon_type: '', description: '', rce_url: '', image_url: '', active: true })
   const [addBotLoading, setAddBotLoading] = useState(false)
@@ -257,6 +259,28 @@ export default function AdminPage() {
     } finally { setSyncing(false) }
   }
 
+  async function parseEventUrl() {
+    if (!eventUrl) return
+    setParsingUrl(true)
+    setAddEventError(null)
+    try {
+      const res = await fetch('/api/admin/parse-event-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', authorization: `Bearer ${password}` },
+        body: JSON.stringify({ url: eventUrl }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setAddEventError(data.error ?? 'Failed to parse URL'); return }
+      setNewEvent(p => ({
+        ...p,
+        title: data.title || p.title,
+        start_date: data.start_date || p.start_date,
+        end_date: data.end_date || p.end_date,
+        event_source: data.event_source || p.event_source,
+      }))
+    } finally { setParsingUrl(false) }
+  }
+
   async function addEvent() {
     setAddEventError(null)
     setAddEventSuccess(null)
@@ -275,6 +299,7 @@ export default function AdminPage() {
       if (!res.ok) { setAddEventError(data.error ?? 'Failed to add event'); return }
       setAddEventSuccess(`Event added!`)
       setNewEvent({ title: '', start_date: '', end_date: '', event_source: 'nhrl', status: 'upcoming' })
+      setEventUrl('')
       setShowAddEvent(false)
       // Refresh all-events list and registrations
       fetch('/api/admin/all-events', { headers: { authorization: `Bearer ${password}` } })
@@ -464,6 +489,17 @@ export default function AdminPage() {
           <div className="card p-4 flex flex-col gap-3">
             <p className="text-xs font-bold text-gray-300">New Event</p>
             {addEventError && <p className="text-xs text-red-400">{addEventError}</p>}
+            {/* URL auto-fill */}
+            <div className="flex gap-2 items-center">
+              <input value={eventUrl}
+                onChange={e => setEventUrl(e.target.value)}
+                className="flex-1 bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500"
+                placeholder="Paste event URL to auto-fill (optional)" />
+              <button onClick={parseEventUrl} disabled={!eventUrl || parsingUrl}
+                className="text-xs bg-blue-700 hover:bg-blue-600 text-white px-3 py-1.5 rounded font-bold disabled:opacity-40 whitespace-nowrap">
+                {parsingUrl ? 'Reading…' : 'Auto-fill'}
+              </button>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <input value={newEvent.title}
                 onChange={e => setNewEvent(p => ({ ...p, title: e.target.value }))}
@@ -508,7 +544,7 @@ export default function AdminPage() {
                 className="text-xs bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded font-bold disabled:opacity-50">
                 {addEventLoading ? 'Saving…' : 'Save Event'}
               </button>
-              <button onClick={() => { setShowAddEvent(false); setAddEventError(null) }}
+              <button onClick={() => { setShowAddEvent(false); setAddEventError(null); setEventUrl('') }}
                 className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1.5">Cancel</button>
             </div>
           </div>
