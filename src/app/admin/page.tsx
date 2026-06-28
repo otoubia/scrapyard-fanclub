@@ -10,7 +10,7 @@ export default function AdminPage() {
   const [syncing, setSyncing] = useState(false)
   const [syncingSlug, setSyncingSlug] = useState<string | null>(null)
   const [resultsSummary, setResultsSummary] = useState<string | null>(null)
-  const [regData, setRegData] = useState<{ events: any[], robots: any[], registrations: Record<string, {resultId: string, robotId: string}[]> } | null>(null)
+  const [regData, setRegData] = useState<{ events: any[], robots: any[], registrations: Record<string, {resultId: string, robotId: string, wins: number, losses: number}[]> } | null>(null)
   const [regLoading, setRegLoading] = useState(false)
   const [allEvents, setAllEvents] = useState<any[]>([])
   const [editBotSearch, setEditBotSearch] = useState<Record<string, string>>({})
@@ -484,38 +484,47 @@ export default function AdminPage() {
         )}
       </section>
 
-      {/* Upcoming Event Registrations */}
+      {/* Active & Upcoming Event Registrations */}
       <section className="mb-10">
         <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-          <Calendar size={16} className="text-blue-400" /> Upcoming Event Registrations
+          <Calendar size={16} className="text-blue-400" /> Active &amp; Upcoming Event Registrations
         </h2>
         {regLoading && <p className="text-gray-500 text-sm">Loading...</p>}
-        {regData && regData.events.length === 0 && <p className="text-gray-500 text-sm">No upcoming events.</p>}
+        {regData && regData.events.length === 0 && <p className="text-gray-500 text-sm">No active or upcoming events.</p>}
         {regData && regData.events.length > 0 && (
           <div className="flex flex-col gap-4">
             {regData.events.map((event: any) => {
+              const isLive = event.status === 'current'
               const regs = regData.registrations[event.id] ?? []
-              const registeredIds = new Set(regs.map((r: any) => r.robotId))
               return (
-                <div key={event.id} className="card p-4">
+                <div key={event.id} className={`card p-4 ${isLive ? 'border-red-500/40' : ''}`}>
                   <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <p className="font-semibold text-sm">{event.title}</p>
-                      <p className="text-xs text-gray-500">{event.start_date ? new Date(event.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''} · {event.event_source?.toUpperCase()}</p>
+                    <div className="flex items-center gap-2">
+                      {isLive && <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded uppercase tracking-wide">Live</span>}
+                      <div>
+                        <p className="font-semibold text-sm">{event.title}</p>
+                        <p className="text-xs text-gray-500">{event.start_date ? new Date(event.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''} · {event.event_source?.toUpperCase()}</p>
+                      </div>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {regData.robots.map((robot: any) => {
-                      const isReg = registeredIds.has(robot.id)
+                      const reg = regs.find((r: any) => r.robotId === robot.id)
+                      const isReg = !!reg
+                      const hasResults = isLive && reg && (reg.wins > 0 || reg.losses > 0)
                       return (
                         <button key={robot.id}
-                          onClick={() => toggleRegistration(robot.id, event.id, isReg)}
+                          onClick={() => !hasResults && toggleRegistration(robot.id, event.id, isReg)}
+                          disabled={!!hasResults}
+                          title={hasResults ? 'Has recorded results — edit via sync' : undefined}
                           className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                            isReg
+                            hasResults
+                              ? 'bg-orange-500/20 border-orange-500 text-orange-400 opacity-50 cursor-not-allowed'
+                              : isReg
                               ? 'bg-orange-500/20 border-orange-500 text-orange-400 hover:bg-red-500/20 hover:border-red-500 hover:text-red-400'
                               : 'bg-[#1a1a1a] border-[#2a2a2a] text-gray-500 hover:border-orange-500 hover:text-orange-400'
                           }`}>
-                          {isReg ? <Trash2 size={9} /> : <Plus size={9} />}
+                          {isReg ? (hasResults ? <Cpu size={9} /> : <Trash2 size={9} />) : <Plus size={9} />}
                           {robot.name}
                         </button>
                       )

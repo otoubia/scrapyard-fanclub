@@ -33,12 +33,11 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const nowIso = new Date().toISOString()
   const [eventsRes, robotsRes, resultsRes] = await Promise.all([
-    supabase.from('events').select('id, title, start_date, event_source')
-      .eq('status', 'upcoming').gt('start_date', nowIso).order('start_date', { ascending: true }),
+    supabase.from('events').select('id, title, start_date, status, event_source')
+      .in('status', ['upcoming', 'current']).order('start_date', { ascending: true }),
     supabase.from('robots').select('id, name, slug').eq('active', true).order('name'),
-    supabase.from('robot_results').select('id, robot_id, event_id')
+    supabase.from('robot_results').select('id, robot_id, event_id, wins, losses')
       .is('placement', null),
   ])
 
@@ -46,10 +45,17 @@ export async function GET(req: NextRequest) {
   const robots = robotsRes.data ?? []
   const results = resultsRes.data ?? []
 
-  const registrations: Record<string, { resultId: string, robotId: string }[]> = {}
+  // Sort: live (current) events first, then upcoming by date
+  events.sort((a, b) => {
+    if (a.status === 'current' && b.status !== 'current') return -1
+    if (b.status === 'current' && a.status !== 'current') return 1
+    return (a.start_date ?? '').localeCompare(b.start_date ?? '')
+  })
+
+  const registrations: Record<string, { resultId: string, robotId: string, wins: number, losses: number }[]> = {}
   for (const r of results) {
     if (!registrations[r.event_id]) registrations[r.event_id] = []
-    registrations[r.event_id].push({ resultId: r.id, robotId: r.robot_id })
+    registrations[r.event_id].push({ resultId: r.id, robotId: r.robot_id, wins: r.wins ?? 0, losses: r.losses ?? 0 })
   }
 
   return NextResponse.json({ events, robots, registrations })
