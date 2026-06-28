@@ -32,6 +32,11 @@ export default function AdminPage() {
   const [pastRegEvent, setPastRegEvent] = useState<any>(null)
   const [pastRegData, setPastRegData] = useState<{ robots: any[], registrations: { resultId: string, robotId: string, wins: number, losses: number, placement: string | null }[] } | null>(null)
   const [pastRegLoading, setPastRegLoading] = useState(false)
+  const [showAddEvent, setShowAddEvent] = useState(false)
+  const [newEvent, setNewEvent] = useState({ title: '', start_date: '', end_date: '', event_source: 'nhrl', status: 'upcoming' })
+  const [addEventLoading, setAddEventLoading] = useState(false)
+  const [addEventError, setAddEventError] = useState<string | null>(null)
+  const [addEventSuccess, setAddEventSuccess] = useState<string | null>(null)
   const [showAddBot, setShowAddBot] = useState(false)
   const [newBot, setNewBot] = useState({ name: '', slug: '', weight_class: '', weapon_type: '', description: '', rce_url: '', image_url: '', active: true })
   const [addBotLoading, setAddBotLoading] = useState(false)
@@ -252,6 +257,32 @@ export default function AdminPage() {
     } finally { setSyncing(false) }
   }
 
+  async function addEvent() {
+    setAddEventError(null)
+    setAddEventSuccess(null)
+    if (!newEvent.title || !newEvent.start_date || !newEvent.event_source) {
+      setAddEventError('Title, start date, and source are required.')
+      return
+    }
+    setAddEventLoading(true)
+    try {
+      const res = await fetch('/api/admin/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', authorization: `Bearer ${password}` },
+        body: JSON.stringify(newEvent),
+      })
+      const data = await res.json()
+      if (!res.ok) { setAddEventError(data.error ?? 'Failed to add event'); return }
+      setAddEventSuccess(`Event added!`)
+      setNewEvent({ title: '', start_date: '', end_date: '', event_source: 'nhrl', status: 'upcoming' })
+      setShowAddEvent(false)
+      // Refresh all-events list and registrations
+      fetch('/api/admin/all-events', { headers: { authorization: `Bearer ${password}` } })
+        .then(r => r.ok ? r.json() : []).then(setAllEvents).catch(() => {})
+      fetchRegistrations(password)
+    } finally { setAddEventLoading(false) }
+  }
+
   function slugify(name: string) {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
   }
@@ -413,6 +444,73 @@ export default function AdminPage() {
                 <button onClick={() => deleteLink(link.id)} className="text-xs text-gray-600 hover:text-red-400 shrink-0"><Trash2 size={12} /></button>
               </div>
             ))}
+          </div>
+        )}
+      </section>
+
+      {/* Add Event */}
+      <section className="mb-10">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <Calendar size={16} className="text-green-400" /> Add Event
+          </h2>
+          <button onClick={() => { setShowAddEvent(v => !v); setAddEventError(null); setAddEventSuccess(null) }}
+            className="flex items-center gap-1.5 text-xs border border-[#2a2a2a] text-gray-300 hover:border-green-500 hover:text-green-400 px-3 py-1.5 rounded-lg transition-colors">
+            <Plus size={11} /> Add Event
+          </button>
+        </div>
+        {addEventSuccess && <p className="text-xs text-green-400 mb-3">{addEventSuccess}</p>}
+        {showAddEvent && (
+          <div className="card p-4 flex flex-col gap-3">
+            <p className="text-xs font-bold text-gray-300">New Event</p>
+            {addEventError && <p className="text-xs text-red-400">{addEventError}</p>}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input value={newEvent.title}
+                onChange={e => setNewEvent(p => ({ ...p, title: e.target.value }))}
+                className="sm:col-span-2 bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500"
+                placeholder="Event title *" />
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Start date *</label>
+                <input type="date" value={newEvent.start_date}
+                  onChange={e => setNewEvent(p => ({ ...p, start_date: e.target.value }))}
+                  className="w-full bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">End date (optional)</label>
+                <input type="date" value={newEvent.end_date}
+                  onChange={e => setNewEvent(p => ({ ...p, end_date: e.target.value }))}
+                  className="w-full bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Source *</label>
+                <select value={newEvent.event_source}
+                  onChange={e => setNewEvent(p => ({ ...p, event_source: e.target.value }))}
+                  className="w-full bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500">
+                  <option value="nhrl">NHRL</option>
+                  <option value="gscrl">GSCRL</option>
+                  <option value="rce">RobotCombatEvents</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Status</label>
+                <select value={newEvent.status}
+                  onChange={e => setNewEvent(p => ({ ...p, status: e.target.value }))}
+                  className="w-full bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500">
+                  <option value="upcoming">Upcoming</option>
+                  <option value="current">Live / Current</option>
+                  <option value="past">Past</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={addEvent} disabled={addEventLoading}
+                className="text-xs bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded font-bold disabled:opacity-50">
+                {addEventLoading ? 'Saving…' : 'Save Event'}
+              </button>
+              <button onClick={() => { setShowAddEvent(false); setAddEventError(null) }}
+                className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1.5">Cancel</button>
+            </div>
           </div>
         )}
       </section>

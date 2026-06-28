@@ -33,9 +33,12 @@ export async function GET(req: NextRequest) {
     })
   }
 
+  const nowIso = new Date().toISOString()
   const [eventsRes, robotsRes, resultsRes] = await Promise.all([
+    // current (live) events: any date; upcoming: only future dates
     supabase.from('events').select('id, title, start_date, status, event_source')
-      .in('status', ['upcoming', 'current']).order('start_date', { ascending: true }),
+      .or(`status.eq.current,and(status.eq.upcoming,start_date.gt.${nowIso})`)
+      .order('start_date', { ascending: true }),
     supabase.from('robots').select('id, name, slug').eq('active', true).order('name'),
     supabase.from('robot_results').select('id, robot_id, event_id, wins, losses')
       .is('placement', null),
