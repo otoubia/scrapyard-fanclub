@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { CheckCircle, XCircle, RefreshCw, Cpu, Calendar, Plus, Trash2, Image as ImageIcon, Video, Pencil, Save, Search, Link2, Radio, Tv, BarChart2, ExternalLink } from 'lucide-react'
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [authed, setAuthed] = useState(false)
+  const [loginError, setLoginError] = useState(false)
+  const passwordInputRef = useRef<HTMLInputElement>(null)
   const [robots, setRobots] = useState<any[]>([])
   const [syncing, setSyncing] = useState(false)
   const [syncingSlug, setSyncingSlug] = useState<string | null>(null)
@@ -44,10 +46,17 @@ export default function AdminPage() {
   const [addBotLoading, setAddBotLoading] = useState(false)
   const [addBotError, setAddBotError] = useState<string | null>(null)
 
+  useEffect(() => {
+    const stored = sessionStorage.getItem('admin_secret')
+    if (stored) { setPassword(stored); fetchPosts(stored) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   async function fetchPosts(secret: string) {
+    setLoginError(false)
     try {
       const res = await fetch('/api/admin/posts', { headers: { authorization: `Bearer ${secret}` } })
-      if (!res.ok) { setAuthed(false); return }
+      if (!res.ok) { setAuthed(false); setLoginError(true); sessionStorage.removeItem('admin_secret'); return }
+      sessionStorage.setItem('admin_secret', secret)
       setAuthed(true)
       const robotsRes = await fetch('/api/admin/robots', { headers: { authorization: `Bearer ${secret}` } })
       if (robotsRes.ok) setRobots(await robotsRes.json())
@@ -338,10 +347,17 @@ export default function AdminPage() {
     return (
       <div className="max-w-sm mx-auto px-4 py-24">
         <h1 className="text-2xl font-black mb-6">Admin Login</h1>
-        <form onSubmit={e => { e.preventDefault(); fetchPosts(password) }} className="flex flex-col gap-4">
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+        <form onSubmit={e => {
+          e.preventDefault()
+          // Read directly from DOM to catch browser autofill that skips onChange
+          const val = passwordInputRef.current?.value ?? password
+          if (val) setPassword(val)
+          fetchPosts(val)
+        }} className="flex flex-col gap-4">
+          <input ref={passwordInputRef} type="password" value={password} onChange={e => { setPassword(e.target.value); setLoginError(false) }}
             className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-500"
-            placeholder="Admin password" />
+            placeholder="Admin password" autoComplete="current-password" />
+          {loginError && <p className="text-red-400 text-sm">Incorrect password.</p>}
           <button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 rounded-lg">Login</button>
         </form>
       </div>
