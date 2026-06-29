@@ -21,11 +21,13 @@ export default function AdminPage() {
   const [approvedMedia, setApprovedMedia] = useState<any[]>([])
   const [mediaLoading, setMediaLoading] = useState(false)
   const [editingMedia, setEditingMedia] = useState<Record<string, { title: string; caption: string; robot_ids: string[]; event_id: string }>>({})
-  const [todayLinks, setTodayLinks] = useState<any[]>([])
   const [linkCandidates, setLinkCandidates] = useState<any[]>([])
   const [linksLoading, setLinksLoading] = useState(false)
-  const [showAddLink, setShowAddLink] = useState(false)
-  const [newLink, setNewLink] = useState({ event_id: '', url: '', label: '', link_type: 'bracket' })
+  const [newLink, setNewLink] = useState({ url: '', label: '', link_type: 'bracket' })
+  const [linkSearch, setLinkSearch] = useState('')
+  const [linkEvent, setLinkEvent] = useState<any>(null)
+  const [linkEventLinks, setLinkEventLinks] = useState<any[]>([])
+  const [linkEventLinksLoading, setLinkEventLinksLoading] = useState(false)
   const [eventDateSearch, setEventDateSearch] = useState('')
   const [editingDateEvent, setEditingDateEvent] = useState<any>(null)
   const [editingDates, setEditingDates] = useState({ start_date: '', end_date: '' })
@@ -62,16 +64,25 @@ export default function AdminPage() {
       if (robotsRes.ok) setRobots(await robotsRes.json())
       fetchRegistrations(secret)
       fetchPendingMedia(secret)
-      fetchTodayLinks(secret)
       // Load all events for editing
       fetch('/api/admin/all-events', { headers: { authorization: `Bearer ${secret}` } })
         .then(r => r.ok ? r.json() : []).then(setAllEvents).catch(() => {})
     } finally {}
   }
 
-  async function fetchTodayLinks(secret: string) {
-    const res = await fetch('/api/admin/event-links?all=1', { headers: { authorization: `Bearer ${secret}` } })
-    if (res.ok) setTodayLinks(await res.json())
+  async function fetchEventLinks(eventId: string) {
+    setLinkEventLinksLoading(true)
+    try {
+      const res = await fetch(`/api/admin/event-links?event_id=${eventId}`, { headers: { authorization: `Bearer ${password}` } })
+      if (res.ok) setLinkEventLinks(await res.json())
+    } finally { setLinkEventLinksLoading(false) }
+  }
+
+  async function selectLinkEvent(event: any) {
+    setLinkEvent(event)
+    setLinkSearch(event.title)
+    setNewLink({ url: '', label: '', link_type: 'bracket' })
+    await fetchEventLinks(event.id)
   }
 
   async function checkAutoLinks() {
@@ -81,20 +92,19 @@ export default function AdminPage() {
       const res = await fetch('/api/admin/event-links?check=1', { headers: { authorization: `Bearer ${password}` } })
       if (res.ok) {
         const data = await res.json()
-        const savedUrls = new Set(todayLinks.map((l: any) => l.url + l.event_id))
-        setLinkCandidates((data.candidates ?? []).filter((c: any) => !savedUrls.has(c.url + c.event_id)))
+        setLinkCandidates(data.candidates ?? [])
       }
     } finally { setLinksLoading(false) }
   }
 
-  async function saveLink(link: any) {
+  async function saveCandidate(link: any) {
     await fetch('/api/admin/event-links', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', authorization: `Bearer ${password}` },
       body: JSON.stringify(link),
     })
-    fetchTodayLinks(password)
     setLinkCandidates(prev => prev.filter(c => !(c.url === link.url && c.event_id === link.event_id)))
+    if (linkEvent?.id === link.event_id) fetchEventLinks(link.event_id)
   }
 
   async function saveAllCandidates() {
@@ -104,8 +114,8 @@ export default function AdminPage() {
       headers: { 'Content-Type': 'application/json', authorization: `Bearer ${password}` },
       body: JSON.stringify({ action: 'save-bulk', links: linkCandidates.map(({ event_id, url, label, link_type, source }: any) => ({ event_id, url, label, link_type, source })) }),
     })
-    fetchTodayLinks(password)
     setLinkCandidates([])
+    if (linkEvent) fetchEventLinks(linkEvent.id)
   }
 
   async function deleteLink(id: string) {
@@ -114,14 +124,18 @@ export default function AdminPage() {
       headers: { 'Content-Type': 'application/json', authorization: `Bearer ${password}` },
       body: JSON.stringify({ id }),
     })
-    fetchTodayLinks(password)
+    if (linkEvent) fetchEventLinks(linkEvent.id)
   }
 
   async function addManualLink() {
-    if (!newLink.event_id || !newLink.url || !newLink.label) return
-    await saveLink({ ...newLink, source: 'manual' })
-    setNewLink({ event_id: '', url: '', label: '', link_type: 'other' })
-    setShowAddLink(false)
+    if (!linkEvent || !newLink.url || !newLink.label) return
+    await fetch('/api/admin/event-links', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', authorization: `Bearer ${password}` },
+      body: JSON.stringify({ event_id: linkEvent.id, ...newLink, source: 'manual' }),
+    })
+    setNewLink({ url: '', label: '', link_type: 'bracket' })
+    fetchEventLinks(linkEvent.id)
   }
 
   async function patchEventDates() {
@@ -379,70 +393,18 @@ export default function AdminPage() {
         <div className="mb-6 card p-4 text-sm text-green-400 whitespace-pre-wrap">{resultsSummary}</div>
       )}
 
-      {/* Today's Event Links */}
+      {/* Event Links */}
       <section className="mb-10">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold flex items-center gap-2">
             <Link2 size={16} className="text-orange-400" /> Event Links
           </h2>
-          <div className="flex gap-2">
-            <button onClick={() => setShowAddLink(v => !v)}
-              className="flex items-center gap-1.5 text-xs border border-[#2a2a2a] text-gray-300 hover:border-orange-500 hover:text-orange-400 px-3 py-1.5 rounded-lg transition-colors">
-              <Plus size={11} /> Add Link
-            </button>
-            <button onClick={checkAutoLinks} disabled={linksLoading}
-              className="flex items-center gap-2 border border-orange-500 text-orange-400 hover:bg-orange-500/10 px-4 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50">
-              <Radio size={12} className={linksLoading ? 'animate-pulse' : ''} />
-              {linksLoading ? 'Checking...' : 'Check Auto-Links'}
-            </button>
-          </div>
+          <button onClick={checkAutoLinks} disabled={linksLoading}
+            className="flex items-center gap-2 border border-orange-500 text-orange-400 hover:bg-orange-500/10 px-4 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50">
+            <Radio size={12} className={linksLoading ? 'animate-pulse' : ''} />
+            {linksLoading ? 'Checking...' : 'Check Auto-Links'}
+          </button>
         </div>
-
-        {/* Manual add form */}
-        {showAddLink && (
-          <div className="card p-4 mb-4 flex flex-col gap-3">
-            <p className="text-xs font-bold text-gray-300">Add Link Manually</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <select value={newLink.event_id} onChange={e => setNewLink(p => ({ ...p, event_id: e.target.value }))}
-                className="bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-orange-500 col-span-2">
-                <option value="">Select event…</option>
-                {(() => {
-                  const todayStr = new Date().toISOString().slice(0, 10)
-                  const todayEvts = allEvents.filter((e: any) => e.start_date?.slice(0, 10) === todayStr)
-                  const upcomingEvts = allEvents.filter((e: any) => (e.start_date?.slice(0, 10) ?? '') > todayStr)
-                  const pastEvts = allEvents.filter((e: any) => (e.start_date?.slice(0, 10) ?? '') < todayStr)
-                  const fmt = (e: any) => `${e.title} (${e.start_date?.slice(0, 10) ?? ''})`
-                  return <>
-                    {todayEvts.length > 0 && <optgroup label="Today">
-                      {todayEvts.map((e: any) => <option key={e.id} value={e.id}>{fmt(e)}</option>)}
-                    </optgroup>}
-                    {upcomingEvts.length > 0 && <optgroup label="Upcoming">
-                      {[...upcomingEvts].sort((a: any, b: any) => a.start_date > b.start_date ? 1 : -1).map((e: any) => <option key={e.id} value={e.id}>{fmt(e)}</option>)}
-                    </optgroup>}
-                    {pastEvts.length > 0 && <optgroup label="Past">
-                      {pastEvts.slice(0, 30).map((e: any) => <option key={e.id} value={e.id}>{fmt(e)}</option>)}
-                    </optgroup>}
-                  </>
-                })()}
-              </select>
-              <input value={newLink.url} onChange={e => setNewLink(p => ({ ...p, url: e.target.value }))}
-                className="bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-orange-500 col-span-2"
-                placeholder="https://..." />
-              <input value={newLink.label} onChange={e => setNewLink(p => ({ ...p, label: e.target.value }))}
-                className="bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-orange-500"
-                placeholder="Label (e.g. 30lb Bracket)" />
-              <select value={newLink.link_type} onChange={e => setNewLink(p => ({ ...p, link_type: e.target.value }))}
-                className="bg-[#111] border border-[#333] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-orange-500">
-                <option value="bracket">Bracket</option>
-                <option value="stream">Stream</option>
-              </select>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={addManualLink} className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded font-bold">Save</button>
-              <button onClick={() => setShowAddLink(false)} className="text-xs text-gray-500 hover:text-gray-300 px-2">Cancel</button>
-            </div>
-          </div>
-        )}
 
         {/* Auto-detected candidates */}
         {linkCandidates.length > 0 && (
@@ -460,7 +422,7 @@ export default function AdminPage() {
                     c.link_type === 'stream' ? 'text-red-400 border-red-500/30 bg-red-500/10' :
                     'text-gray-400 border-[#2a2a2a]'}`}>{c.label}</span>
                   <a href={c.url} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:text-orange-400 truncate flex-1 min-w-0">{c.url}</a>
-                  <button onClick={() => saveLink(c)} className="text-xs bg-green-700 hover:bg-green-600 text-white px-2 py-0.5 rounded shrink-0">Save</button>
+                  <button onClick={() => saveCandidate(c)} className="text-xs bg-green-700 hover:bg-green-600 text-white px-2 py-0.5 rounded shrink-0">Save</button>
                   <button onClick={() => setLinkCandidates(prev => prev.filter((_, j) => j !== i))} className="text-xs text-gray-600 hover:text-red-400 shrink-0"><XCircle size={13} /></button>
                 </div>
               ))}
@@ -468,23 +430,86 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Saved links */}
-        {todayLinks.length === 0 && linkCandidates.length === 0 ? (
-          <p className="text-gray-500 text-sm">No links saved for today. Use &quot;Check Auto-Links&quot; or add manually.</p>
-        ) : todayLinks.length > 0 && (
-          <div className="flex flex-col gap-2">
-            {todayLinks.map((link: any) => (
-              <div key={link.id} className="flex items-center gap-2 card p-3 flex-wrap">
-                <span className="text-xs text-gray-400 font-medium shrink-0">{link.event?.title ?? '—'}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full border shrink-0 ${
-                  link.link_type === 'bracket' ? 'text-orange-400 border-orange-500/30' :
-                  link.link_type === 'stream' ? 'text-red-400 border-red-500/30' :
-                  link.link_type === 'results' ? 'text-blue-400 border-blue-500/30' :
-                  'text-gray-400 border-[#2a2a2a]'}`}>{link.label}</span>
-                <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:text-orange-400 truncate flex-1 min-w-0">{link.url}</a>
-                <button onClick={() => deleteLink(link.id)} className="text-xs text-gray-600 hover:text-red-400 shrink-0"><Trash2 size={12} /></button>
+        {/* Search for event */}
+        <div className="relative mb-3">
+          <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+          <input
+            value={linkSearch}
+            onChange={e => { setLinkSearch(e.target.value); setLinkEvent(null); setLinkEventLinks([]) }}
+            className="w-full bg-[#111] border border-[#333] rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-orange-500"
+            placeholder="Search events to manage links…"
+          />
+        </div>
+        {linkSearch.length > 0 && !linkEvent && (() => {
+          const matches = allEvents.filter(e => e.title.toLowerCase().includes(linkSearch.toLowerCase())).slice(0, 8)
+          if (!matches.length) return <p className="text-gray-500 text-sm">No events found.</p>
+          return (
+            <div className="flex flex-col gap-1 border border-[#2a2a2a] rounded-lg overflow-hidden mb-3">
+              {matches.map(e => (
+                <button key={e.id} onClick={() => selectLinkEvent(e)}
+                  className="text-left px-3 py-2 text-sm hover:bg-[#1a1a1a] transition-colors flex items-center justify-between">
+                  <span>{e.title}</span>
+                  <span className="text-xs text-gray-500">{e.start_date?.slice(0, 10)}</span>
+                </button>
+              ))}
+            </div>
+          )
+        })()}
+
+        {/* Selected event: existing links + add form */}
+        {linkEvent && (
+          <div className="card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="font-semibold text-sm">{linkEvent.title}</p>
+                <p className="text-xs text-gray-500">{linkEvent.start_date?.slice(0, 10)}</p>
               </div>
-            ))}
+              <button onClick={() => { setLinkEvent(null); setLinkSearch(''); setLinkEventLinks([]) }}
+                className="text-xs text-gray-500 hover:text-gray-300">Clear</button>
+            </div>
+            {linkEventLinksLoading && <p className="text-gray-500 text-sm">Loading…</p>}
+            {!linkEventLinksLoading && (
+              <>
+                {linkEventLinks.length === 0 && <p className="text-xs text-gray-600 mb-3">No links yet.</p>}
+                {linkEventLinks.length > 0 && (
+                  <div className="flex flex-col gap-2 mb-4">
+                    {linkEventLinks.map((link: any) => (
+                      <div key={link.id} className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-xs px-2 py-0.5 rounded-full border shrink-0 ${
+                          link.link_type === 'bracket' ? 'text-orange-400 border-orange-500/30' :
+                          link.link_type === 'stream' ? 'text-red-400 border-red-500/30' :
+                          link.link_type === 'results' ? 'text-blue-400 border-blue-500/30' :
+                          'text-gray-400 border-[#2a2a2a]'}`}>{link.label}</span>
+                        <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:text-orange-400 truncate flex-1 min-w-0">{link.url}</a>
+                        <button onClick={() => deleteLink(link.id)} className="text-xs text-gray-600 hover:text-red-400 shrink-0"><Trash2 size={12} /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="border-t border-[#2a2a2a] pt-3 flex flex-col gap-2">
+                  <p className="text-xs text-gray-500 font-medium">Add link</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input value={newLink.url} onChange={e => setNewLink(p => ({ ...p, url: e.target.value }))}
+                      className="sm:col-span-2 bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-orange-500"
+                      placeholder="https://…" />
+                    <input value={newLink.label} onChange={e => setNewLink(p => ({ ...p, label: e.target.value }))}
+                      className="bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-orange-500"
+                      placeholder="Label (e.g. 30lb Bracket)" />
+                    <select value={newLink.link_type} onChange={e => setNewLink(p => ({ ...p, link_type: e.target.value }))}
+                      className="bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-orange-500">
+                      <option value="bracket">Bracket</option>
+                      <option value="stream">Stream</option>
+                      <option value="results">Results</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <button onClick={addManualLink} disabled={!newLink.url || !newLink.label}
+                    className="self-start text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded font-bold disabled:opacity-40">
+                    Save Link
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </section>
