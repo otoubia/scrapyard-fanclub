@@ -250,11 +250,16 @@ export default function AdminPage() {
     try {
       const res = await fetch(`/api/cron/sync-robot-results?slug=${slug}`, { headers: { authorization: `Bearer ${password}` } })
       const data = await res.json()
+      if (!res.ok) { setResultsSummary(`❌ ${slug}: ${data.error ?? 'sync failed'}`); return }
       const name = Object.keys(data.perRobot ?? {})[0] ?? slug
+      const aborted = data.perRobot?.[name] === -1
+      const rowErrors = data.debug?.[slug]?.robotRowErrors ?? 0
       const count = data.totalResults ?? 0
       const highlights = data.totalHighlights ?? 0
       const fixed = data.fixedDates ?? 0
-      setResultsSummary(`✅ ${name}: ${count} results, ${highlights} highlights${fixed ? `, ${fixed} dates fixed` : ''}`)
+      setResultsSummary(aborted
+        ? `❌ ${name}: sync aborted with an error — check server logs`
+        : `${rowErrors ? '⚠️' : '✅'} ${name}: ${count} results, ${highlights} highlights${fixed ? `, ${fixed} dates fixed` : ''}${rowErrors ? ` — ${rowErrors} row error(s), check server logs` : ''}`)
     } finally { setSyncingSlug(null) }
   }
 
@@ -266,10 +271,13 @@ export default function AdminPage() {
         ? robots.map((r: any) => r.slug)
         : ['maccabot','trampoline','control-freak','split-decision','power-off','power-on','joyful-timeline','twitch','tinkerbot','sarissa','last-minute','last-second','fart','salt-and-pepper','dumb-and-dumber']
       let totalResults = 0, totalHighlights = 0, totalFixed = 0
+      const failedSlugs: string[] = []
       for (let i = 0; i < slugs.length; i++) {
         setResultsSummary(`Syncing... ${i + 1}/${slugs.length}: ${slugs[i]}`)
         const res = await fetch(`/api/cron/sync-robot-results?slug=${slugs[i]}`, { headers: { authorization: `Bearer ${password}` } })
         const data = await res.json()
+        const hasRowErrors = data.debug?.[slugs[i]]?.robotRowErrors > 0
+        if (!res.ok || Object.values(data.perRobot ?? {}).includes(-1) || hasRowErrors) failedSlugs.push(slugs[i])
         totalResults += data.totalResults || 0
         totalHighlights += data.totalHighlights || 0
         totalFixed += data.fixedDates || 0
@@ -278,7 +286,8 @@ export default function AdminPage() {
       setResultsSummary(`Syncing NHRL...`)
       const nhrlRes = await fetch('/api/cron/sync-nhrl', { headers: { authorization: `Bearer ${password}` } })
       const nhrlData = await nhrlRes.json()
-      setResultsSummary(`✅ Done! ${totalResults} results, ${totalHighlights} highlights, ${totalFixed} dates fixed | NHRL: ${nhrlData.eventsAdded ?? 0} added, ${nhrlData.resultsAdded ?? 0} results`)
+      const failNote = failedSlugs.length ? ` | ⚠️ failed: ${failedSlugs.join(', ')} — check server logs` : ''
+      setResultsSummary(`${failedSlugs.length ? '⚠️' : '✅'} Done! ${totalResults} results, ${totalHighlights} highlights, ${totalFixed} dates fixed | NHRL: ${nhrlData.eventsAdded ?? 0} added, ${nhrlData.resultsAdded ?? 0} results${failNote}`)
     } finally { setSyncing(false) }
   }
 

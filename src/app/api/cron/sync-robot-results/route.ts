@@ -95,14 +95,24 @@ export async function GET(req: NextRequest) {
   for (const robot of robots) {
     let robotResults = 0
     let robotHighlights = 0
+    let robotRowErrors = 0
 
     try {
       // Fetch all years in parallel
       const pages = await Promise.all(
         YEARS.map(year =>
           fetch(`${robot.rce_url}?year=${year}`, { next: { revalidate: 0 } })
-            .then(r => r.ok ? r.text() : '')
-            .catch(() => '')
+            .then(r => {
+              if (!r.ok) {
+                console.error(`[sync-robot-results] ${robot.slug}: fetch ${robot.rce_url}?year=${year} returned ${r.status}`)
+                return ''
+              }
+              return r.text()
+            })
+            .catch(err => {
+              console.error(`[sync-robot-results] ${robot.slug}: fetch ${robot.rce_url}?year=${year} threw:`, err instanceof Error ? err.message : err)
+              return ''
+            })
         )
       )
 
@@ -224,7 +234,7 @@ export async function GET(req: NextRequest) {
             }).eq('id', eventId)
           }
         } else {
-          const { data: newEvent } = await supabase
+          const { data: newEvent, error: insertEventError } = await supabase
             .from('events')
             .insert({
               title: row.eventName,
@@ -237,6 +247,10 @@ export async function GET(req: NextRequest) {
             })
             .select('id')
             .single()
+          if (insertEventError) {
+            console.error(`[sync-robot-results] ${robot.slug}: failed to insert event ${externalId} (${row.eventName}):`, insertEventError.message)
+            robotRowErrors++
+          }
           eventId = newEvent?.id ?? null
         }
 
@@ -252,9 +266,19 @@ export async function GET(req: NextRequest) {
         const resultData = { wins: 0, losses: 0, placement, is_highlight: isPodium(row.place) }
 
         if (existingResult) {
-          await supabase.from('robot_results').update(resultData).eq('id', existingResult.id)
+          const { error: updateResultError } = await supabase.from('robot_results').update(resultData).eq('id', existingResult.id)
+          if (updateResultError) {
+            console.error(`[sync-robot-results] ${robot.slug}: failed to update robot_result for event ${externalId}:`, updateResultError.message)
+            robotRowErrors++
+            continue
+          }
         } else {
-          await supabase.from('robot_results').insert({ robot_id: robot.id, event_id: eventId, ...resultData })
+          const { error: insertResultError } = await supabase.from('robot_results').insert({ robot_id: robot.id, event_id: eventId, ...resultData })
+          if (insertResultError) {
+            console.error(`[sync-robot-results] ${robot.slug}: failed to insert robot_result for event ${externalId}:`, insertResultError.message)
+            robotRowErrors++
+            continue
+          }
         }
         robotResults++
         totalResults++
@@ -281,12 +305,16 @@ export async function GET(req: NextRequest) {
           }
         }
       }
-    } catch {
+    } catch (err) {
+      console.error(`[sync-robot-results] ${robot.slug}: aborted with error:`, err instanceof Error ? err.message : err)
       summary[robot.name] = -1
       continue
     }
 
     summary[robot.name] = robotResults
+    if (robotRowErrors > 0) {
+      debug[robot.slug] = { ...debug[robot.slug], robotRowErrors }
+    }
 
     // Immediately invalidate the robot's page cache
     revalidatePath(`/robots/${robot.slug}`)
