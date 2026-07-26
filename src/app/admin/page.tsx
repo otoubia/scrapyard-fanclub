@@ -30,8 +30,9 @@ export default function AdminPage() {
   const [linkEventLinksLoading, setLinkEventLinksLoading] = useState(false)
   const [eventDateSearch, setEventDateSearch] = useState('')
   const [editingDateEvent, setEditingDateEvent] = useState<any>(null)
-  const [editingDates, setEditingDates] = useState({ start_date: '', end_date: '' })
+  const [editingDates, setEditingDates] = useState({ title: '', location: '', start_date: '', end_date: '' })
   const [dateSaveStatus, setDateSaveStatus] = useState<string | null>(null)
+  const [deleteEventStatus, setDeleteEventStatus] = useState<string | null>(null)
   const [pastRegSearch, setPastRegSearch] = useState('')
   const [pastRegEvent, setPastRegEvent] = useState<any>(null)
   const [pastRegData, setPastRegData] = useState<{ robots: any[], registrations: { resultId: string, robotId: string, wins: number, losses: number, placement: string | null }[] } | null>(null)
@@ -148,9 +149,30 @@ export default function AdminPage() {
     })
     setDateSaveStatus(res.ok ? '✅ Saved!' : '❌ Failed')
     if (res.ok) {
-      setAllEvents(prev => prev.map(e => e.id === editingDateEvent.id
-        ? { ...e, start_date: editingDates.start_date, end_date: editingDates.end_date }
-        : e))
+      setAllEvents(prev => prev.map(e => e.id === editingDateEvent.id ? { ...e, ...editingDates } : e))
+      setEditingDateEvent((prev: any) => prev && { ...prev, ...editingDates })
+      fetchRegistrations(password)
+    }
+  }
+
+  async function deleteEvent() {
+    if (!editingDateEvent) return
+    if (!confirm(`Delete "${editingDateEvent.title}"? This also removes its registrations, recorded results, and links. This cannot be undone.`)) return
+    setDeleteEventStatus('Deleting...')
+    const res = await fetch('/api/admin/events', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', authorization: `Bearer ${password}` },
+      body: JSON.stringify({ id: editingDateEvent.id }),
+    })
+    if (res.ok) {
+      setAllEvents(prev => prev.filter(e => e.id !== editingDateEvent.id))
+      setEditingDateEvent(null)
+      setEventDateSearch('')
+      setDateSaveStatus(null)
+      setDeleteEventStatus(null)
+      fetchRegistrations(password)
+    } else {
+      setDeleteEventStatus('❌ Failed to delete')
     }
   }
 
@@ -601,16 +623,16 @@ export default function AdminPage() {
         )}
       </section>
 
-      {/* Edit Event Dates */}
+      {/* Edit / Delete Event */}
       <section className="mb-10">
         <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-          <Calendar size={16} className="text-yellow-400" /> Edit Event Dates
+          <Calendar size={16} className="text-yellow-400" /> Edit or Delete Event
         </h2>
         <div className="relative mb-3">
           <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input
             value={eventDateSearch}
-            onChange={e => { setEventDateSearch(e.target.value); setEditingDateEvent(null); setDateSaveStatus(null) }}
+            onChange={e => { setEventDateSearch(e.target.value); setEditingDateEvent(null); setDateSaveStatus(null); setDeleteEventStatus(null) }}
             className="w-full bg-[#111] border border-[#333] rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-orange-500"
             placeholder="Search events…"
           />
@@ -625,7 +647,12 @@ export default function AdminPage() {
               {matches.map(e => (
                 <button key={e.id} onClick={() => {
                   setEditingDateEvent(e)
-                  setEditingDates({ start_date: e.start_date?.slice(0, 10) ?? '', end_date: e.end_date?.slice(0, 10) ?? '' })
+                  setEditingDates({
+                    title: e.title ?? '',
+                    location: e.location ?? '',
+                    start_date: e.start_date?.slice(0, 10) ?? '',
+                    end_date: e.end_date?.slice(0, 10) ?? '',
+                  })
                   setEventDateSearch(e.title)
                 }}
                   className="text-left px-3 py-2 text-sm hover:bg-[#1a1a1a] transition-colors flex items-center justify-between">
@@ -640,8 +667,20 @@ export default function AdminPage() {
           <div className="card p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <p className="font-semibold text-sm">{editingDateEvent.title}</p>
-              <button onClick={() => { setEditingDateEvent(null); setEventDateSearch(''); setDateSaveStatus(null) }}
+              <button onClick={() => { setEditingDateEvent(null); setEventDateSearch(''); setDateSaveStatus(null); setDeleteEventStatus(null) }}
                 className="text-xs text-gray-500 hover:text-gray-300">Clear</button>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Title</label>
+              <input value={editingDates.title}
+                onChange={e => setEditingDates(p => ({ ...p, title: e.target.value }))}
+                className="w-full bg-[#111] border border-[#333] rounded px-2 py-1.5 text-sm focus:outline-none focus:border-orange-500" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Location (optional)</label>
+              <input value={editingDates.location}
+                onChange={e => setEditingDates(p => ({ ...p, location: e.target.value }))}
+                className="w-full bg-[#111] border border-[#333] rounded px-2 py-1.5 text-sm focus:outline-none focus:border-orange-500" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -660,9 +699,16 @@ export default function AdminPage() {
             <div className="flex items-center gap-3">
               <button onClick={patchEventDates}
                 className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded font-bold">
-                Save Dates
+                Save Changes
               </button>
               {dateSaveStatus && <span className="text-xs text-gray-400">{dateSaveStatus}</span>}
+            </div>
+            <div className="border-t border-[#2a2a2a] pt-3 flex items-center gap-3">
+              <button onClick={deleteEvent}
+                className="text-xs bg-red-500/20 hover:bg-red-500 border border-red-500 text-red-400 hover:text-white px-3 py-1.5 rounded font-bold transition-colors">
+                Delete Event
+              </button>
+              {deleteEventStatus && <span className="text-xs text-gray-400">{deleteEventStatus}</span>}
             </div>
           </div>
         )}
