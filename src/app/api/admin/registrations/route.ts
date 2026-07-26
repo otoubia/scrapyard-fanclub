@@ -33,18 +33,24 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const nowIso = new Date().toISOString()
+  const todayStr = new Date().toISOString().slice(0, 10)
   const [eventsRes, robotsRes, resultsRes] = await Promise.all([
-    // current (live) events: any date; upcoming: only future dates
-    supabase.from('events').select('id, title, start_date, status, event_source')
-      .or(`status.eq.current,and(status.eq.upcoming,start_date.gt.${nowIso})`)
+    supabase.from('events').select('id, title, start_date, end_date, status, event_source')
+      .in('status', ['current', 'upcoming'])
       .order('start_date', { ascending: true }),
     supabase.from('robots').select('id, name, slug').eq('active', true).order('name'),
     supabase.from('robot_results').select('id, robot_id, event_id, wins, losses')
       .is('placement', null),
   ])
 
-  const events = eventsRes.data ?? []
+  // Keep events that haven't finished yet — status=current, still-upcoming, or
+  // today falls within [start_date, end_date] (date-only, so same-day events
+  // whose start timestamp has already passed still show up here).
+  const events = (eventsRes.data ?? []).filter(e => {
+    if (e.status === 'current') return true
+    const end = (e.end_date || e.start_date)?.slice(0, 10)
+    return !end || end >= todayStr
+  })
   const robots = robotsRes.data ?? []
   const results = resultsRes.data ?? []
 
