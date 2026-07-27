@@ -33,6 +33,8 @@ export default function AdminPage() {
   const [editingDates, setEditingDates] = useState({ title: '', location: '', start_date: '', end_date: '' })
   const [dateSaveStatus, setDateSaveStatus] = useState<string | null>(null)
   const [deleteEventStatus, setDeleteEventStatus] = useState<string | null>(null)
+  const [confirmDeleteEvent, setConfirmDeleteEvent] = useState(false)
+  const confirmDeleteEventTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [pastRegSearch, setPastRegSearch] = useState('')
   const [pastRegEvent, setPastRegEvent] = useState<any>(null)
   const [pastRegData, setPastRegData] = useState<{ robots: any[], registrations: { resultId: string, robotId: string, wins: number, losses: number, placement: string | null }[] } | null>(null)
@@ -49,6 +51,9 @@ export default function AdminPage() {
   const [addBotLoading, setAddBotLoading] = useState(false)
   const [addBotError, setAddBotError] = useState<string | null>(null)
   const [deletingBotId, setDeletingBotId] = useState<string | null>(null)
+  const [confirmDeleteBotId, setConfirmDeleteBotId] = useState<string | null>(null)
+  const [deleteBotError, setDeleteBotError] = useState<string | null>(null)
+  const confirmDeleteBotTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const stored = sessionStorage.getItem('admin_secret')
@@ -158,7 +163,6 @@ export default function AdminPage() {
 
   async function deleteEvent() {
     if (!editingDateEvent) return
-    if (!confirm(`Delete "${editingDateEvent.title}"? This also removes its registrations, recorded results, and links. This cannot be undone.`)) return
     setDeleteEventStatus('Deleting...')
     const res = await fetch('/api/admin/events', {
       method: 'DELETE',
@@ -390,7 +394,7 @@ export default function AdminPage() {
   }
 
   async function deleteBot(robot: any) {
-    if (!confirm(`Delete "${robot.name}"? This also removes its recorded results. Media/highlights mentioning it will just lose the tag. This cannot be undone.`)) return
+    setDeleteBotError(null)
     setDeletingBotId(robot.id)
     try {
       const res = await fetch('/api/admin/robots', {
@@ -399,7 +403,7 @@ export default function AdminPage() {
         body: JSON.stringify({ id: robot.id }),
       })
       if (res.ok) setRobots(prev => prev.filter(r => r.id !== robot.id))
-      else { const data = await res.json().catch(() => ({})); alert(data.error ?? 'Failed to delete bot') }
+      else { const data = await res.json().catch(() => ({})); setDeleteBotError(data.error ?? 'Failed to delete bot') }
     } finally { setDeletingBotId(null) }
   }
 
@@ -682,7 +686,7 @@ export default function AdminPage() {
           <div className="card p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <p className="font-semibold text-sm">{editingDateEvent.title}</p>
-              <button onClick={() => { setEditingDateEvent(null); setEventDateSearch(''); setDateSaveStatus(null); setDeleteEventStatus(null) }}
+              <button onClick={() => { setEditingDateEvent(null); setEventDateSearch(''); setDateSaveStatus(null); setDeleteEventStatus(null); setConfirmDeleteEvent(false) }}
                 className="text-xs text-gray-500 hover:text-gray-300">Clear</button>
             </div>
             <div>
@@ -719,9 +723,24 @@ export default function AdminPage() {
               {dateSaveStatus && <span className="text-xs text-gray-400">{dateSaveStatus}</span>}
             </div>
             <div className="border-t border-[#2a2a2a] pt-3 flex items-center gap-3">
-              <button onClick={deleteEvent}
-                className="text-xs bg-red-500/20 hover:bg-red-500 border border-red-500 text-red-400 hover:text-white px-3 py-1.5 rounded font-bold transition-colors">
-                Delete Event
+              <button
+                onClick={() => {
+                  if (confirmDeleteEvent) {
+                    setConfirmDeleteEvent(false)
+                    if (confirmDeleteEventTimer.current) clearTimeout(confirmDeleteEventTimer.current)
+                    deleteEvent()
+                  } else {
+                    setConfirmDeleteEvent(true)
+                    if (confirmDeleteEventTimer.current) clearTimeout(confirmDeleteEventTimer.current)
+                    confirmDeleteEventTimer.current = setTimeout(() => setConfirmDeleteEvent(false), 4000)
+                  }
+                }}
+                className={`text-xs px-3 py-1.5 rounded font-bold transition-colors border ${
+                  confirmDeleteEvent
+                    ? 'bg-red-500 border-red-500 text-white'
+                    : 'bg-red-500/20 hover:bg-red-500 border-red-500 text-red-400 hover:text-white'
+                }`}>
+                {confirmDeleteEvent ? 'Click again to confirm' : 'Delete Event'}
               </button>
               {deleteEventStatus && <span className="text-xs text-gray-400">{deleteEventStatus}</span>}
             </div>
@@ -929,25 +948,44 @@ export default function AdminPage() {
           <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
             <Cpu size={16} className="text-orange-400" /> Manage Bots
           </h2>
+          {deleteBotError && <p className="text-xs text-red-400 mb-2">{deleteBotError}</p>}
           <div className="flex flex-wrap gap-2">
-            {robots.map((robot: any) => (
-              <div key={robot.slug} className="flex items-center border border-[#2a2a2a] rounded-lg overflow-hidden">
-                <button
-                  onClick={() => syncOneBot(robot.slug)}
-                  disabled={syncing || syncingSlug === robot.slug}
-                  className="flex items-center gap-1.5 text-xs text-gray-300 hover:border-orange-500 hover:text-orange-400 px-3 py-1.5 transition-colors disabled:opacity-40">
-                  <RefreshCw size={11} className={syncingSlug === robot.slug ? 'animate-spin' : ''} />
-                  {robot.name}
-                </button>
-                <button
-                  onClick={() => deleteBot(robot)}
-                  disabled={deletingBotId === robot.id}
-                  title="Delete bot"
-                  className="flex items-center px-2 py-1.5 border-l border-[#2a2a2a] text-gray-500 hover:bg-red-500 hover:text-white transition-colors disabled:opacity-40">
-                  <Trash2 size={11} />
-                </button>
-              </div>
-            ))}
+            {robots.map((robot: any) => {
+              const armed = confirmDeleteBotId === robot.id
+              return (
+                <div key={robot.slug} className="flex items-center border border-[#2a2a2a] rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => syncOneBot(robot.slug)}
+                    disabled={syncing || syncingSlug === robot.slug}
+                    className="flex items-center gap-1.5 text-xs text-gray-300 hover:border-orange-500 hover:text-orange-400 px-3 py-1.5 transition-colors disabled:opacity-40">
+                    <RefreshCw size={11} className={syncingSlug === robot.slug ? 'animate-spin' : ''} />
+                    {robot.name}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (armed) {
+                        setConfirmDeleteBotId(null)
+                        if (confirmDeleteBotTimer.current) clearTimeout(confirmDeleteBotTimer.current)
+                        deleteBot(robot)
+                      } else {
+                        setConfirmDeleteBotId(robot.id)
+                        if (confirmDeleteBotTimer.current) clearTimeout(confirmDeleteBotTimer.current)
+                        confirmDeleteBotTimer.current = setTimeout(() => setConfirmDeleteBotId(null), 4000)
+                      }
+                    }}
+                    disabled={deletingBotId === robot.id}
+                    title={armed ? 'Click again to confirm delete' : 'Delete bot'}
+                    className={`flex items-center gap-1 px-2 py-1.5 border-l text-xs transition-colors disabled:opacity-40 ${
+                      armed
+                        ? 'bg-red-500 border-red-500 text-white'
+                        : 'border-[#2a2a2a] text-gray-500 hover:bg-red-500 hover:text-white'
+                    }`}>
+                    <Trash2 size={11} />
+                    {armed && 'Confirm?'}
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </section>
       )}
