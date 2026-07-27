@@ -35,3 +35,19 @@ export async function POST(req: NextRequest) {
   revalidatePath(`/robots/${slug}`)
   return NextResponse.json(data)
 }
+
+export async function DELETE(req: NextRequest) {
+  if (!checkAuth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { id } = await req.json()
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+
+  const supabase = await createServiceClient()
+  const { data: robot } = await supabase.from('robots').select('slug').eq('id', id).single()
+  const { error } = await supabase.from('robots').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  revalidatePath('/robots')
+  if (robot?.slug) revalidatePath(`/robots/${robot.slug}`)
+  revalidatePath('/')
+  return NextResponse.json({ ok: true })
+}

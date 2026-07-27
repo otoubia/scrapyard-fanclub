@@ -48,6 +48,7 @@ export default function AdminPage() {
   const [newBot, setNewBot] = useState({ name: '', slug: '', weight_class: '', weapon_type: '', description: '', rce_url: '', image_url: '', active: true })
   const [addBotLoading, setAddBotLoading] = useState(false)
   const [addBotError, setAddBotError] = useState<string | null>(null)
+  const [deletingBotId, setDeletingBotId] = useState<string | null>(null)
 
   useEffect(() => {
     const stored = sessionStorage.getItem('admin_secret')
@@ -386,6 +387,20 @@ export default function AdminPage() {
       const robotsRes = await fetch('/api/admin/robots', { headers: { authorization: `Bearer ${password}` } })
       if (robotsRes.ok) setRobots(await robotsRes.json())
     } finally { setAddBotLoading(false) }
+  }
+
+  async function deleteBot(robot: any) {
+    if (!confirm(`Delete "${robot.name}"? This also removes its recorded results. Media/highlights mentioning it will just lose the tag. This cannot be undone.`)) return
+    setDeletingBotId(robot.id)
+    try {
+      const res = await fetch('/api/admin/robots', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', authorization: `Bearer ${password}` },
+        body: JSON.stringify({ id: robot.id }),
+      })
+      if (res.ok) setRobots(prev => prev.filter(r => r.id !== robot.id))
+      else { const data = await res.json().catch(() => ({})); alert(data.error ?? 'Failed to delete bot') }
+    } finally { setDeletingBotId(null) }
   }
 
   if (!authed) {
@@ -908,21 +923,30 @@ export default function AdminPage() {
         )}
       </section>
 
-      {/* Per-bot sync buttons */}
+      {/* Per-bot sync + delete */}
       {robots.length > 0 && (
         <section className="mb-10">
           <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
-            <Cpu size={16} className="text-orange-400" /> Sync Individual Bot
+            <Cpu size={16} className="text-orange-400" /> Manage Bots
           </h2>
           <div className="flex flex-wrap gap-2">
             {robots.map((robot: any) => (
-              <button key={robot.slug}
-                onClick={() => syncOneBot(robot.slug)}
-                disabled={syncing || syncingSlug === robot.slug}
-                className="flex items-center gap-1.5 text-xs border border-[#2a2a2a] text-gray-300 hover:border-orange-500 hover:text-orange-400 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40">
-                <RefreshCw size={11} className={syncingSlug === robot.slug ? 'animate-spin' : ''} />
-                {robot.name}
-              </button>
+              <div key={robot.slug} className="flex items-center border border-[#2a2a2a] rounded-lg overflow-hidden">
+                <button
+                  onClick={() => syncOneBot(robot.slug)}
+                  disabled={syncing || syncingSlug === robot.slug}
+                  className="flex items-center gap-1.5 text-xs text-gray-300 hover:border-orange-500 hover:text-orange-400 px-3 py-1.5 transition-colors disabled:opacity-40">
+                  <RefreshCw size={11} className={syncingSlug === robot.slug ? 'animate-spin' : ''} />
+                  {robot.name}
+                </button>
+                <button
+                  onClick={() => deleteBot(robot)}
+                  disabled={deletingBotId === robot.id}
+                  title="Delete bot"
+                  className="flex items-center px-2 py-1.5 border-l border-[#2a2a2a] text-gray-500 hover:bg-red-500 hover:text-white transition-colors disabled:opacity-40">
+                  <Trash2 size={11} />
+                </button>
+              </div>
             ))}
           </div>
         </section>
