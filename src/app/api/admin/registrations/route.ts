@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/server'
+import { easternNow } from '@/lib/utils'
 
 function checkAuth(req: NextRequest) {
   const auth = req.headers.get('authorization')
@@ -33,7 +34,9 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const todayStr = new Date().toISOString().slice(0, 10)
+  // Eastern, not UTC — a UTC "today" rolls over at 8pm ET and drops events
+  // off this list while they're still running.
+  const { dateStr: todayStr } = easternNow()
   const [eventsRes, robotsRes, resultsRes] = await Promise.all([
     supabase.from('events').select('id, title, start_date, end_date, status, event_source')
       .in('status', ['current', 'upcoming'])

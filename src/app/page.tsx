@@ -3,16 +3,15 @@ import EventsSection from '@/components/sections/EventsSection'
 import HighlightsSection from '@/components/sections/HighlightsSection'
 import GallerySection from '@/components/sections/GallerySection'
 import HeroSection from '@/components/sections/HeroSection'
+import { easternNow, LIVE_START_HOUR } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
 export default async function HomePage() {
   let events: any[] = [], highlights: any[] = [], media: any[] = []
   let eventIdsWithResults = new Set<string>()
-  const todayStr = new Date().toISOString().slice(0, 10)
-
-  const todayMidnight = new Date()
-  todayMidnight.setHours(0, 0, 0, 0)
+  // Eastern time, not UTC: events are East Coast, and a UTC "today" flips at 8pm ET.
+  const { dateStr: todayStr, hour: etHour } = easternNow()
 
   try {
     const supabase = await createServiceClient()
@@ -59,25 +58,28 @@ export default async function HomePage() {
     // Supabase not yet configured — placeholder UI shown
   }
 
-  // Live: status=current OR today falls within [start_date, end_date]
+  // Live: status=current (explicit override from admin/sync), OR today (ET) falls
+  // within [start_date, end_date]. On the day an event starts it goes live at 8am ET;
+  // after that it stays live all day, through midnight ET of its final day.
   const liveEventsBase = events.filter(e => {
     if (e.status === 'current') return true
     const start = e.start_date?.slice(0, 10)
     const end = (e.end_date || e.start_date)?.slice(0, 10)
-    return start && end && start <= todayStr && end >= todayStr
+    if (!start || !end || start > todayStr || end < todayStr) return false
+    return start < todayStr || etHour >= LIVE_START_HOUR
   })
   const liveEventIds = new Set(liveEventsBase.map((e: any) => e.id))
 
-  // Past: has robot_results AND started before today AND not currently live
+  // Past: has robot_results AND started before today (ET) AND not currently live
   const pastEventsBase = events.filter(e =>
     eventIdsWithResults.has(e.id) &&
-    new Date(e.start_date || 0) < todayMidnight &&
+    (e.start_date?.slice(0, 10) ?? '') < todayStr &&
     !liveEventIds.has(e.id)
   )
 
-  // Upcoming: starts in the future (not yet started)
+  // Upcoming: hasn't started yet — including today's events before they go live at 8am ET
   const upcomingEventsBase = events
-    .filter(e => (e.start_date?.slice(0, 10) ?? '') > todayStr)
+    .filter(e => (e.start_date?.slice(0, 10) ?? '') >= todayStr && !liveEventIds.has(e.id))
     .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
 
   // Fetch bracket and stream links for ALL displayed events in one query
