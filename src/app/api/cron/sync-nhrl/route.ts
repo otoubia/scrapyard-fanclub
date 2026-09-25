@@ -3,68 +3,49 @@ import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/server'
 
 const NHRL_BASE = 'https://brettzone.nhrl.io/brettZone/api.php'
-const NHRL_BRACKET_BASE = 'https://brettzone.nhrl.io/brettZone/bracketView.php'
+const NHRL_MATCHES_BASE = 'https://brettzone.nhrl.io/brettZone/backend/getTournamentMatchesDataTables.php'
 const NHRL_BOT_PIC_BASE = 'https://brettzone.nhrl.io/brettZone/getBotPic.php'
 const NHRL_LOCATION = '165 Water St., Norwalk, CT 06854'
 
 
-interface BracketRound {
-  allPlayers: string[]
-  winners: string[]
+interface BracketMatch {
+  round: number
+  player1clean: string
+  player2clean: string
+  winnerClean: string | null
 }
 
-// Parse BrettZone bracket HTML into rounds with players and winners
-function parseBracketHtml(html: string): BracketRound[] {
-  const rounds: BracketRound[] = []
-  // Split into round blocks
-  const roundBlocks = html.split(/<div[^>]+class="[^"]*\bround\b[^"]*"/)
-  for (const block of roundBlocks.slice(1)) { // skip first (before any round)
-    // Get all player names
-    const allPlayers: string[] = []
-    const playerNameRegex = /<span[^>]+class="[^"]*player-name[^"]*"[^>]*>([\s\S]*?)<\/span>/gi
-    let m
-    while ((m = playerNameRegex.exec(block)) !== null) {
-      const name = m[1].replace(/<[^>]+>/g, '').trim()
-      if (name) allPlayers.push(name)
-    }
-    // Get winners — player-name inside a div with class "player winner"
-    const winners: string[] = []
-    const winnerBlockRegex = /<div[^>]+class="[^"]*player winner[^"]*"[^>]*>([\s\S]*?)<\/div>/gi
-    while ((m = winnerBlockRegex.exec(block)) !== null) {
-      const nameMatch = m[1].match(/<span[^>]+class="[^"]*player-name[^"]*"[^>]*>([\s\S]*?)<\/span>/i)
-      if (nameMatch) {
-        const name = nameMatch[1].replace(/<[^>]+>/g, '').trim()
-        if (name) winners.push(name)
-      }
-    }
-    if (allPlayers.length > 0) rounds.push({ allPlayers, winners })
-  }
-  return rounds
+// Fetch a tournament's elimination-bracket matches ("W-*" ids; "EX-*" are group-stage/exhibition fights)
+async function fetchBracketMatches(tournamentId: string): Promise<BracketMatch[]> {
+  const res = await fetch(`${NHRL_MATCHES_BASE}?tournamentID=${tournamentId}&start=0&length=-1&draw=1`, { next: { revalidate: 0 } })
+  if (!res.ok) return []
+  const data: { data?: Array<{ id: string, round: string | number, player1clean: string, player2clean: string, winner: string }> } = await res.json()
+  return (data.data ?? [])
+    .filter(m => m.id.startsWith('W-'))
+    .map(m => ({
+      round: Number(m.round),
+      player1clean: m.player1clean,
+      player2clean: m.player2clean,
+      // "Red" is player 1, "Blue" is player 2
+      winnerClean: m.winner === 'Red' ? m.player1clean : m.winner === 'Blue' ? m.player2clean : null,
+    }))
 }
 
-// Derive placement from bracket rounds for a given bot name (case-insensitive)
-function getPlacementFromBracket(rounds: BracketRound[], botName: string): { placement: string, isPrimetime: boolean } | null {
-  const lower = botName.toLowerCase()
-  const inRound = (r: BracketRound) => r.allPlayers.some(p => p.toLowerCase() === lower)
-  const isWinner = (r: BracketRound) => r.winners.some(p => p.toLowerCase() === lower)
+// Derive placement from the single-elimination bracket. The last three rounds
+// (quarterfinal, semifinal, final) are Prime Time.
+function getPlacementFromBracket(matches: BracketMatch[], cleanName: string): { placement: string, isPrimetime: boolean } | null {
+  const finalRound = Math.max(0, ...matches.map(m => m.round))
+  if (finalRound < 3) return null
+  const find = (round: number) => matches.find(m => m.round === round && (m.player1clean === cleanName || m.player2clean === cleanName))
 
-  // Bot must appear in QF (round 0) to have made Prime Time
-  if (!rounds[0] || !inRound(rounds[0])) return null
-
-  const numRounds = rounds.length
-  const finalRound = rounds[numRounds - 1]
-  const sfRound = rounds[numRounds - 2]
-  const qfRound = rounds[0]
-
-  // Champion: won every round including the final
-  if (finalRound && isWinner(finalRound)) return { placement: '1st Place', isPrimetime: true }
-  // Runner-up: in final but lost
-  if (finalRound && inRound(finalRound) && !isWinner(finalRound)) return { placement: '2nd Place', isPrimetime: true }
-  // SF loser: in SF but not final
-  if (sfRound && sfRound !== qfRound && inRound(sfRound) && !isWinner(sfRound))
-    return { placement: '3rd-4th Place', isPrimetime: true }
-  // QF loser: in QF but not SF
-  return { placement: '5th-8th Place (Prime Time)', isPrimetime: true }
+  const final = find(finalRound)
+  if (final?.winnerClean === cleanName) return { placement: '1st Place', isPrimetime: true }
+  if (final?.winnerClean) return { placement: '2nd Place', isPrimetime: true }
+  const sf = find(finalRound - 1)
+  if (sf?.winnerClean && sf.winnerClean !== cleanName) return { placement: '3rd-4th Place', isPrimetime: true }
+  const qf = find(finalRound - 2)
+  if (qf?.winnerClean && qf.winnerClean !== cleanName) return { placement: '5th-8th Place (Prime Time)', isPrimetime: true }
+  return null
 }
 
 interface BotFight {
@@ -249,18 +230,11 @@ export async function GET(req: NextRequest) {
   // Build a lookup: tournamentID → tournament data (for dates)
   const tournamentById = new Map(allTournaments.map(t => [t.tournamentID, t]))
 
-  // 4. Fetch career stats + fight history for each NHRL bot in parallel
-  const botStatsMap: Record<string, any> = {}
+  // 4. Fetch fight history for each NHRL bot in parallel
   const botFightsMap: Record<string, BotFight[]> = {}
   await Promise.all(nhrlRobots.map(async robot => {
-    const cleanName = robot.stats.nhrl_clean_name
     try {
-      const [statsRes, fights] = await Promise.all([
-        fetch(`${NHRL_BASE}/stats/bot/${cleanName}`, { next: { revalidate: 0 } }).then(r => r.ok ? r.json() : null),
-        fetchBotFights(cleanName),
-      ])
-      if (statsRes) botStatsMap[robot.id] = statsRes.botStats
-      botFightsMap[robot.id] = fights
+      botFightsMap[robot.id] = await fetchBotFights(robot.stats.nhrl_clean_name)
     } catch {}
   }))
 
@@ -277,9 +251,10 @@ export async function GET(req: NextRequest) {
       .in('robot_id', nhrlRobots.map(r => r.id))
   }
 
+  // Bracket matches per tournament, shared across bots in the same tournament
+  const bracketCache = new Map<string, Promise<BracketMatch[]>>()
   for (const robot of nhrlRobots) {
     const cleanName = robot.stats.nhrl_clean_name
-    const botStats = botStatsMap[robot.id]
     const fights = botFightsMap[robot.id] ?? []
 
     // Group fights by tournament → calculate W/L
@@ -291,11 +266,11 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch brackets for all tournaments this bot competed in (for placement/Prime Time)
-    const bracketMap = new Map<string, BracketRound[]>()
+    const bracketMap = new Map<string, BracketMatch[]>()
     await Promise.all([...byTournament.keys()].map(async tid => {
       try {
-        const bRes = await fetch(`${NHRL_BRACKET_BASE}?tournamentID=${tid}`, { next: { revalidate: 0 } })
-        if (bRes.ok) bracketMap.set(tid, parseBracketHtml(await bRes.text()))
+        if (!bracketCache.has(tid)) bracketCache.set(tid, fetchBracketMatches(tid))
+        bracketMap.set(tid, await bracketCache.get(tid)!)
       } catch {}
     }))
 
@@ -326,9 +301,7 @@ export async function GET(req: NextRequest) {
       if (!eventId) continue
 
       // Get placement from bracket
-      const bracketRounds = bracketMap.get(tournamentId) ?? []
-      const bracketPlacement = getPlacementFromBracket(bracketRounds, cleanName) ??
-        getPlacementFromBracket(bracketRounds, botStats?.botName ?? '')
+      const bracketPlacement = getPlacementFromBracket(bracketMap.get(tournamentId) ?? [], cleanName)
 
       await supabase.from('robot_results').insert({
         robot_id: robot.id, event_id: eventId,
