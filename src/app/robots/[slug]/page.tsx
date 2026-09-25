@@ -132,7 +132,7 @@ export default async function RobotPage({ params }: { params: Promise<{ slug: st
                       {r.placement}
                     </span>
                   )}
-                  {!r.placement && <span className="text-gray-600 text-xs">Pending</span>}
+                  {!r.placement && !(r.wins > 0 || r.losses > 0) && <span className="text-gray-600 text-xs">Pending</span>}
                 </div>
               </div>
             ))}
