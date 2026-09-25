@@ -314,7 +314,7 @@ export default function AdminPage() {
       const nhrlRes = await fetch('/api/cron/sync-nhrl', { headers: { authorization: `Bearer ${password}` } })
       const nhrlData = await nhrlRes.json()
       const failNote = failedSlugs.length ? ` | ⚠️ failed: ${failedSlugs.join(', ')} — check server logs` : ''
-      setResultsSummary(`${failedSlugs.length ? '⚠️' : '✅'} Done! ${totalResults} results, ${totalHighlights} highlights, ${totalFixed} dates fixed | NHRL: ${nhrlData.eventsAdded ?? 0} added, ${nhrlData.resultsAdded ?? 0} results${failNote}`)
+      setResultsSummary(`${failedSlugs.length ? '⚠️' : '✅'} Done! ${totalResults} results, ${totalHighlights} highlights, ${totalFixed} dates fixed | NHRL: ${nhrlData.eventsAdded ?? 0} added, ${nhrlData.resultsAdded ?? 0} results, ${nhrlData.entrantsLinked ?? 0} upcoming entries${failNote}`)
     } finally { setSyncing(false) }
   }
 

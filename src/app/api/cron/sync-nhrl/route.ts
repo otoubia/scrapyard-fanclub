@@ -70,6 +70,7 @@ function getPlacementFromBracket(rounds: BracketRound[], botName: string): { pla
 interface BotFight {
   tournamentId: string
   tournamentName: string
+  createTime: string
   won: boolean
 }
 
@@ -116,6 +117,7 @@ function dateFromTournamentId(id: string): string | null {
 interface NHRLTournament {
   tournamentID: string
   tournamentName: string
+  createTime: string
   scheduledStartTime: string
   startTime: string
   endTime: string
@@ -354,10 +356,48 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Note: we do NOT auto-assign bots to upcoming NHRL events
-  // because we don't have reliable registration data.
-  // Bots will appear on past events only (from fightsByBot).
-  // Upcoming NHRL events still appear in the events calendar.
+  // 7. Link bots to upcoming NHRL events once BrettZone posts the entrant list.
+  // NHRL creates each weight class's tournament a few days before the event; its players
+  // endpoint then lists entrants. Attach a 0-0 result to the nhrl.io placeholder for that
+  // event (not a per-weight-class event — those are created from fights after the event).
+  let entrantsLinked = 0
+  const DAY = 86400000
+  const pendingTournaments = allTournaments.filter(t =>
+    !t.isTest && t.startTime.startsWith('0000') && t.endTime.startsWith('0000') &&
+    Date.now() - new Date(t.createTime).getTime() < 30 * DAY // skip old abandoned tournaments
+  )
+  if (pendingTournaments.length > 0) {
+    const { data: placeholders } = await supabase.from('events')
+      .select('id, start_date')
+      .eq('event_source', 'nhrl').eq('status', 'upcoming').like('external_id', 'nhrl-upcoming:%')
+      .order('start_date')
+    const nhrlRobotByClean = new Map(nhrlRobots.map(r => [r.stats.nhrl_clean_name as string, r]))
+    const linked = new Set<string>()
+    for (const t of pendingTournaments) {
+      // The event is the first placeholder within 3 weeks after the tournament was created
+      const created = new Date(t.createTime).getTime()
+      const placeholder = (placeholders ?? []).find(p => {
+        const d = new Date(p.start_date).getTime()
+        return d >= created - DAY && d <= created + 21 * DAY
+      })
+      if (!placeholder) continue
+      try {
+        const pRes = await fetch(`${NHRL_BASE}/tournaments/${t.tournamentID}/players`, { next: { revalidate: 0 } })
+        if (!pRes.ok) continue
+        const players: Array<{ cleanName: string }> = (await pRes.json()).players ?? []
+        for (const p of players) {
+          const robot = nhrlRobotByClean.get(p.cleanName)
+          const key = `${robot?.id}:${placeholder.id}`
+          if (!robot || linked.has(key)) continue
+          linked.add(key)
+          await supabase.from('robot_results').insert({
+            robot_id: robot.id, event_id: placeholder.id, wins: 0, losses: 0, placement: null, is_highlight: false,
+          })
+          entrantsLinked++
+        }
+      } catch {}
+    }
+  }
 
   // 8. Update each NHRL bot's stats and try to fetch image from BrettZone
   const { data: freshRobots } = await supabase.from('robots').select('id, slug, stats, image_url').in('id', nhrlRobots.map(r => r.id))
@@ -395,5 +435,5 @@ export async function GET(req: NextRequest) {
   }
 
   revalidatePath('/')
-  return NextResponse.json({ ok: true, eventsAdded, eventsUpdated, resultsAdded })
+  return NextResponse.json({ ok: true, eventsAdded, eventsUpdated, resultsAdded, entrantsLinked })
 }
