@@ -139,38 +139,44 @@ function bestDate(t: NHRLTournament): string | null {
   return dateFromTournamentId(t.tournamentID)
 }
 
-// Scrape upcoming events from nhrl.io/events page
-async function fetchUpcomingNHRLEvents(): Promise<Array<{title: string, date: string | null, external_id: string}>> {
+// Scrape upcoming events from nhrl.io/events page.
+// Each upcoming event is a card (class "event-bar_upcoming_event") holding a title <p>,
+// a subtitle <p>, and a date line like "Sat Nov 07 / 10:00 AM Eastern / House of Havoc, Norwalk CT".
+// Cards with a TBA date are skipped.
+async function fetchUpcomingNHRLEvents(): Promise<Array<{title: string, date: string, location: string, external_id: string}>> {
   try {
     const res = await fetch('https://nhrl.io/events', { next: { revalidate: 0 } })
     if (!res.ok) return []
     const html = await res.text()
-    const text = html.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ')
+    const clean = (s: string) => s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim()
 
-    const upcoming: Array<{title: string, date: string | null, external_id: string}> = []
+    const upcoming: Array<{title: string, date: string, location: string, external_id: string}> = []
     const now = new Date()
-    const currentYear = now.getFullYear()
 
-    // Match patterns like "June 2026 Open" or "2026 NHRL..." near a date "Sat Jun 06" or "Jun 06"
-    // Strategy: find date patterns first, then grab nearby event names
+    const cards = html.split(/class="[^"]*event-bar_upcoming_event/).slice(1)
+    for (const card of cards) {
+      const titles = [...card.matchAll(/<p class="[^"]*event-bar_title[^"]*">([\s\S]*?)<\/p>/g)].map(m => clean(m[1]))
+      const dateLine = card.match(/<p class="[^"]*event-bar_event_date[^"]*">([\s\S]*?)<\/p>/)
+      if (!titles.length || !dateLine) continue
 
-    // Pattern 1: "Mon Mmm DD / HH:MM" e.g. "Sat Jun 06 / 10:00"
-    const dateRegex = /(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})/gi
-    let m
-    while ((m = dateRegex.exec(text)) !== null) {
-      const month = m[1], day = m[2]
-      const dateStr = `${month} ${day}, ${currentYear}`
-      const parsed = new Date(dateStr)
+      const parts = clean(dateLine[1]).split('/').map(s => s.trim())
+      const dm = parts[0].match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+(\d{1,2})/i)
+      if (!dm) continue // TBA date
+      const month = dm[1].slice(0, 3), day = dm[2]
+
+      // Page doesn't show the year: assume this year, or next year if that date is well in the past
+      let year = now.getFullYear()
+      let parsed = new Date(`${month} ${day}, ${year}`)
+      if (parsed.getTime() < now.getTime() - 60 * 86400000) parsed = new Date(`${month} ${day}, ${++year}`)
       if (isNaN(parsed.getTime()) || parsed <= now) continue
 
-      // Grab the surrounding ~200 chars to find the event name
-      const surrounding = text.substring(Math.max(0, m.index - 200), m.index + 50)
-      // Look for event title patterns nearby: "XXXX Open", "Pro Tour", "Championship", etc.
-      const titleMatch = surrounding.match(/(\d{4}\s+NHRL[^/\n]{5,60}|NHRL[^/\n]{5,60}|\w+ \d{4} (?:Open|Pro Tour|Championship)[^/\n]{0,40})/i)
-      const title = titleMatch ? titleMatch[1].trim().replace(/\s+/g, ' ') : `NHRL ${month} ${currentYear}`
+      // Subtitle is the descriptive name ("2026 NHRL World Championship Pro Tour - Rd. 3")
+      const title = titles[1] || titles[0]
+      const scrapedLoc = parts[parts.length - 1]
+      const location = !scrapedLoc || /TBA|Norwalk/i.test(scrapedLoc) ? NHRL_LOCATION : scrapedLoc
 
-      const slug = `${currentYear}-${month.toLowerCase()}-${day.padStart(2,'0')}`
-      upcoming.push({ title, date: parsed.toISOString(), external_id: `nhrl-upcoming:${slug}` })
+      const slug = `${year}-${month.toLowerCase()}-${day.padStart(2, '0')}`
+      upcoming.push({ title, date: parsed.toISOString(), location, external_id: `nhrl-upcoming:${slug}` })
     }
 
     // Deduplicate by external_id
@@ -198,24 +204,39 @@ export async function GET(req: NextRequest) {
 
   // 2. Scrape upcoming events from nhrl.io/events
   const upcomingFromWebsite = await fetchUpcomingNHRLEvents()
-  const now = new Date()
   // Upsert upcoming events; mark as past if the date has already passed
-  for (const ev of upcomingFromWebsite) {
-    if (!ev.date) continue
-    const newStatus = new Date(ev.date) > now ? 'upcoming' : 'past'
-    const { data: existing } = await supabase.from('events').select('id').eq('external_id', ev.external_id).single()
-    if (!existing) {
-      if (newStatus !== 'upcoming') continue // don't create new rows for past scraped events
-      await supabase.from('events').insert({
-        title: ev.title, event_source: 'nhrl', external_id: ev.external_id,
-        status: 'upcoming', start_date: ev.date, location: NHRL_LOCATION,
+  // Only reconcile when the scrape found something, so a failed/changed page doesn't wipe placeholders
+  if (upcomingFromWebsite.length > 0) {
+    const scrapedIds = new Set(upcomingFromWebsite.map(e => e.external_id))
+    const { data: existingUpcoming } = await supabase.from('events')
+      .select('id, external_id, start_date')
+      .eq('event_source', 'nhrl').eq('status', 'upcoming')
+
+    for (const ev of upcomingFromWebsite) {
+      const fields = {
+        title: ev.title, status: 'upcoming', start_date: ev.date, location: ev.location,
         updated_at: new Date().toISOString(),
-      })
-    } else {
-      await supabase.from('events').update({
-        title: ev.title, status: newStatus, start_date: ev.date,
-        updated_at: new Date().toISOString(),
-      }).eq('id', existing.id)
+      }
+      const existing = (existingUpcoming ?? []).find(e => e.external_id === ev.external_id)
+        // Adopt a manually-added NHRL event on the same day instead of creating a duplicate
+        ?? (existingUpcoming ?? []).find(e => !e.external_id && e.start_date?.slice(0, 10) === ev.date.slice(0, 10))
+      if (existing) {
+        await supabase.from('events').update({ ...fields, external_id: ev.external_id }).eq('id', existing.id)
+      } else {
+        await supabase.from('events').insert({ ...fields, event_source: 'nhrl', external_id: ev.external_id })
+      }
+    }
+
+    // Placeholders no longer listed on nhrl.io (event happened, or bogus date) are replaced by the
+    // real BrettZone tournaments — delete them unless media or links were attached.
+    const stale = (existingUpcoming ?? []).filter(e => e.external_id?.startsWith('nhrl-upcoming:') && !scrapedIds.has(e.external_id))
+    for (const e of stale) {
+      const [{ count: mediaCount }, { count: linkCount }] = await Promise.all([
+        supabase.from('media').select('id', { count: 'exact', head: true }).eq('event_id', e.id),
+        supabase.from('event_links').select('id', { count: 'exact', head: true }).eq('event_id', e.id),
+      ])
+      if (!mediaCount && !linkCount) await supabase.from('events').delete().eq('id', e.id)
+      else await supabase.from('events').update({ status: 'past', updated_at: new Date().toISOString() }).eq('id', e.id)
     }
   }
 
